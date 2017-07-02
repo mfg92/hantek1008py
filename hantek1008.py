@@ -37,6 +37,7 @@ class Hantek1008:
     # channel names are one based
 
     __MAX_PACKAGE_SIZE = 64
+    __VSCALE_FACTORS = [0.02, 0.125, 1.0]
     __roll_mode_sampling_rate_to_id_dic: Dict[int, int] = {440: 0x18, 220: 0x19, 88: 0x1a, 44: 0x1b, 22: 0x1c}
 
     def __init__(self, ns_per_div: int = 500000,
@@ -200,22 +201,19 @@ class Hantek1008:
         self.__send_cmd(0xa3, parameter=[time_per_div_id])
 
     def __vertical_scale_id_to_factor(self, vs_id: int):
-        # TODO: 0.02 is this right? check that
-        assert 1 <= vs_id <= 3
-        return [0.02, 0.2, 1.0][vs_id - 1]
+        assert 1 <= vs_id <= len(Hantek1008.__VSCALE_FACTORS)
+        return Hantek1008.__VSCALE_FACTORS[vs_id - 1]
 
     def __vertical_scale_factor_to_id(self, vs_factor: float):
-        # TODO: 0.02 is this right? check that
-        assert vs_factor in [0.02, 0.2, 1.0]
-        return [0.02, 0.2, 1.0].index(vs_factor) + 1
+        assert vs_factor in Hantek1008.__VSCALE_FACTORS
+        return Hantek1008.__VSCALE_FACTORS.index(vs_factor) + 1
 
     def __send_set_vertical_scale(self, scale_factors: List[float] = 1.0):
         """send the a2 command to set the vertical sample scale factor per channel. 
-        Only following values are allowed: 1.0, 0.2, 0.02 [TODO: check] Volt/Div.
+        Only following values are allowed: 1.0, 0.125, 0.02 [TODO: check] Volt/Div.
         scale_factor must be an array of length 8 with a float scale value for each channel. 
-        Or a singel float, than all channel will have that scale factor"""
-        # TODO: 0.02 is this right? check that
-        assert all(x in [1.0, 0.2, 0.02] for x in scale_factors)
+        Or a single float, than all channel will have that scale factor"""
+        assert all(x in Hantek1008.__VSCALE_FACTORS for x in scale_factors)
         scale_factors = [self.__vertical_scale_factor_to_id(sf) for sf in scale_factors]
         self.__send_cmd(0xa2, parameter=scale_factors, sec_till_response_request=0.2132)
 
@@ -395,7 +393,11 @@ class Hantek1008:
 
     @staticmethod
     def valid_roll_sampling_rates() -> List[int]:
-        return Hantek1008.__roll_mode_sampling_rate_to_id_dic.keys()
+        return copy.deepcopy(list(Hantek1008.__roll_mode_sampling_rate_to_id_dic.keys()))
+
+    @staticmethod
+    def valid_vscale_factors() -> List[int]:
+        return copy.deepcopy(Hantek1008.__VSCALE_FACTORS)
 
     def request_samples_roll_mode_single_row(self, sampling_rate: int = 440, raw: bool = False) -> List[List[float]]:
         for channel_data in self.request_samples_roll_mode(sampling_rate=sampling_rate, raw=raw):

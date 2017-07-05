@@ -368,6 +368,9 @@ class Hantek1008:
 
     def request_samples_normal_mode(self) -> Tuple[List[List[float]]]:
         """get the data"""
+        assert self.__zero_offset_shift_compensation_channel is None, \
+            "zero offset shift compensation is not implemented for normal mode"
+
         self.__send_cmd(0xf3)
 
         self.__send_cmd(0xe4, parameter=[0x01])
@@ -456,6 +459,27 @@ class Hantek1008:
         except GeneratorExit:
             # TODO: auto start pause tread?
             pass
+
+    def __update_zero_offset_compensation_value(self, zero_readings: List[float]) -> None:
+        # TODO problem zero offset different on different vscales?
+        zoscc_vscale = self.__vertical_scale_factors[self.__zero_offset_shift_compensation_channel]
+        assert zoscc_vscale == 1.0  # is this really necessary?
+        zoscc_zero_offset = self.__zero_offsets[zoscc_vscale][self.__zero_offset_shift_compensation_channel]
+
+        adaption_factor = 0.00002  # [0,1]
+        for v in zero_readings:
+            # print("v", v, "zo", zoscc_zero_offset)
+            delta = v - zoscc_zero_offset
+            self.__zero_offset_shift_compensation_value = \
+                (1.0 - adaption_factor) * self.__zero_offset_shift_compensation_value \
+                + adaption_factor * delta
+        print("zosc-value", self.__zero_offset_shift_compensation_value)
+
+    def __get_zero_offset(self, channel_id: int, vscale: float) -> float:
+        zero_offset = self.__zero_offsets[vscale][channel_id]
+        if self.__zero_offset_shift_compensation_channel is not None:
+            zero_offset += self.__zero_offset_shift_compensation_value
+        return zero_offset
 
     def set_generator_on(self, turn_on: bool):
         # TODO not tested
@@ -562,7 +586,8 @@ class Hantek1008:
         if channel_id < len(self.__vertical_scale_factors):
             vscale = self.__vertical_scale_factors[channel_id]
             # get right zero offset for that channel and the used vertical scale factor (vscale)
-            zero_offset = self.__zero_offsets[vscale][channel_id]
+            # zero_offset = self.__zero_offsets[vscale][channel_id]
+            zero_offset = self.__get_zero_offset(channel_id, vscale)
 
         scale = 0.01 * vscale
 

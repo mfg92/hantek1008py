@@ -140,72 +140,48 @@ def main(csv_file_path: str,
     """
 
     try:
-        if plot:
-            import matplotlib.pyplot as plt
-            import warnings
-            plt.ion()
-            line_styles = ['r-', 'g-', 'b-', 'rs', 'gs', 'bs', 'r^', 'g^', 'b^']
-
-        if csv_file_path:
-            # output_csv_filename = "channel_data.csv"
-            if csv_file_path == '-':
-                log.info("Exporting data to stdout...")
-                csv_file = sys.stdout
-            elif csv_file_path.endswith(".xz"):
-                log.info(f"Exporting data lzma-compressed to file '{csv_file_path}'...")
-                csv_file = lzma.open(csv_file_path, 'at', newline='')
-            else:
-                log.info(f"Exporting data to file '{csv_file_path}'...")
-                csv_file = open(csv_file_path, 'at', newline='')
-            csv_writer = csv.writer(csv_file, delimiter=',')
-            csv_file.write(f"# {', '.join([ f'ch_{i + 1}' for i in selected_channels])}\n")
-            csv_file.write("# Calibration data:\n")
-            for vscale, zero_offset in sorted(device.get_calibration_data().items()):
-                csv_file.write(f"# zero_offset [{vscale:<4}]: {' '.join([str(round(v, 1)) for v in zero_offset])}\n")
+        # output_csv_filename = "channel_data.csv"
+        if csv_file_path == '-':
+            log.info("Exporting data to stdout...")
+            csv_file = sys.stdout
+        elif csv_file_path.endswith(".xz"):
+            log.info(f"Exporting data lzma-compressed to file '{csv_file_path}'...")
+            csv_file = lzma.open(csv_file_path, 'at', newline='')
+        else:
+            log.info(f"Exporting data to file '{csv_file_path}'...")
+            csv_file = open(csv_file_path, 'at', newline='')
+        csv_writer = csv.writer(csv_file, delimiter=',')
+        csv_file.write(f"# {', '.join([ f'ch_{i + 1}' for i in selected_channels])}\n")
+        csv_file.write("# Calibration data:\n")
+        for vscale, zero_offset in sorted(device.get_calibration_data().items()):
+            csv_file.write(f"# zero_offset [{vscale:<4}]: {' '.join([str(round(v, 1)) for v in zero_offset])}\n")
 
         if roll_mode:
             for channel_data in device.request_samples_roll_mode(raw=raw, sampling_rate=sampling_rate):
-                if csv_file_path:
-                    channel_data = [d for i, d in enumerate(channel_data) if i in selected_channels]
-                    milli_volt_int_representation = False
-                    if milli_volt_int_representation:
-                        channel_data = [[f"{round(value*1000)}" for value in single_channel]
-                                        for single_channel in channel_data]
-                    csv_writer.writerows(zip(*channel_data))
-                    csv_file.write(f"# UNIX-Time: {time.time()}\n")
+                channel_data = [d for i, d in enumerate(channel_data) if i in selected_channels]
+                milli_volt_int_representation = False
+                if milli_volt_int_representation:
+                    channel_data = [[f"{round(value*1000)}" for value in single_channel]
+                                    for single_channel in channel_data]
+                csv_writer.writerows(zip(*channel_data))
+                csv_file.write(f"# UNIX-Time: {time.time()}\n")
         else:
-            for _ in range(100):
+            while True:
                 channel_data2, channel_data3 = device.request_samples_normal_mode()
 
                 print(len(channel_data2[0]), len(channel_data3[0]))
-                channel_data = [cd2 + cd3 for cd2, cd3 in zip(channel_data2, channel_data3)]
+                # channel_data = [cd2 + cd3 for cd2, cd3 in zip(channel_data2, channel_data3)]
                 # channel_data = [cd[70:] + cd[:70] for cd in channel_data]
 
-                if csv_file_path:
-                    csv_writer.writerows(zip(*channel_data2))
-                    csv_writer.writerows(zip(*channel_data3))
-
-                if plot:
-                    plt.clf()  # clear the plot
-                    plt.axis([0, max(len(channel_data2[0]), len(channel_data3[0])), -3, 3])
-                    plt.xlabel("Sample Index")
-                    plt.ylabel("Voltage in V")
-
-                    for i, data in enumerate(channel_data):
-                        if i not in selected_channels:
-                            continue
-                        plt.plot(list(range(0, len(data))), data, line_styles[i])
-                    warnings.filterwarnings("ignore", ".*GUI is implemented.*")
-                    plt.pause(0.00001)
+                csv_writer.writerows(zip(*channel_data2))
+                csv_writer.writerows(zip(*channel_data3))
+                csv_file.write(f"# UNIX-Time: {time.time()}\n")
     except KeyboardInterrupt:
         log.info("Sample collection was canceled by user")
         pass
 
-    if csv_file_path:
-        csv_file.close()
-        log.info("Exporting data finished")
-    if plot:
-        plt.close()
+    csv_file.close()
+    log.info("Exporting data finished")
 
     device.close()
 

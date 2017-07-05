@@ -1,8 +1,8 @@
 #!/bin/python3
 
-from Hantek1008Driver.hantek1008 import Hantek1008
-from Hantek1008Driver.hantek1008 import CorrectionDataType
-from typing import List
+from hantek1008 import Hantek1008
+from hantek1008 import CorrectionDataType
+from typing import Optional, List
 import logging as log
 import argparse
 import time
@@ -12,19 +12,19 @@ import sys
 import csv
 
 
-def main(selected_channels: None or List[int]=None,
-         vertical_scale_factor: None or List[float]=1.0,
-         plot: bool=True,
-         csv_file_path: None or str=None,
+def main(csv_file_path: str,
+         selected_channels: Optional[List[int]]=None,
+         vertical_scale_factor: Optional[List[float]]=1.0,
          roll_mode: bool=True,
-         calibrate_output_file_path: None or str=None,
-         calibration_file_path: None or str=None,
-         zero_offset_shift_compensation_channel: None or int=None,
+         calibrate_output_file_path: Optional[str]=None,
+         calibration_file_path: Optional[str]=None,
+         zero_offset_shift_compensation_channel: Optional[int]=None,
          raw: bool=False,
          sampling_rate: int=440) -> None:
 
     if selected_channels is None or len(selected_channels) == 0:
         selected_channels = list(range(1, 9))
+
     assert len(set(selected_channels)) == len(selected_channels)
     assert all(1 <= c <= 8 for c in selected_channels)
     selected_channels = [i-1 for i in selected_channels]

@@ -2,7 +2,7 @@ import usb.core
 import usb.util
 import usb.backend
 import time
-from typing import List, Dict
+from typing import List, Dict, Tuple
 import logging as log
 import math
 from threading import Thread
@@ -36,13 +36,14 @@ class Hantek1008:
     # channel_id/channel_index are zero based
     # channel names are one based
 
-    __MAX_PACKAGE_SIZE = 64
-    __VSCALE_FACTORS = [0.02, 0.125, 1.0]
+    __MAX_PACKAGE_SIZE: int = 64
+    __VSCALE_FACTORS: List[int] = [0.02, 0.125, 1.0]
     __roll_mode_sampling_rate_to_id_dic: Dict[int, int] = {440: 0x18, 220: 0x19, 88: 0x1a, 44: 0x1b, 22: 0x1c}
 
-    def __init__(self, ns_per_div: int = 500000,
+    def __init__(self, ns_per_div: int = 500_000,
                  vertical_scale_factor: float or List[float] = 1.0,
-                 correction_data: CorrectionDataType = None):
+                 correction_data: CorrectionDataType or None = None,
+                 zero_offset_shift_compensation_channel: int or None = None):
         """
         :param ns_per_div: 
         :param vertical_scale_factor: must be an array of length 8 with a float scale value for each channel. 
@@ -53,23 +54,28 @@ class Hantek1008:
         assert isinstance(vertical_scale_factor, float) or len(vertical_scale_factor) == 8
         assert len(correction_data) == 8
         assert all(isinstance(x, dict) for x in correction_data)
+        assert zero_offset_shift_compensation_channel is None or zero_offset_shift_compensation_channel in range(0, 8)
 
         self.__ns_per_div: int = ns_per_div  # on value for all channels
 
         # on vertical scale factor (float) per channel
-        self.__vertical_scale_factors: List[float] = [vertical_scale_factor] * 8 if isinstance(vertical_scale_factor, float) \
+        self.__vertical_scale_factors: List[float] = [vertical_scale_factor] * 8 if isinstance(vertical_scale_factor,
+                                                                                               float) \
             else copy.deepcopy(vertical_scale_factor)  # scale factor per channel
 
         # list of dicts of lists of dicts
         # usecase: __correction_data[channel_id][vscale][..] = {"units":..., "factor": ...}
         self.__correction_data: CorrectionDataType = copy.deepcopy(correction_data)
 
+        self.__zero_offset_shift_compensation_channel: int or None = zero_offset_shift_compensation_channel
+        self.__zero_offset_shift_compensation_value: float = 0.0
+
         # dict of list of shorts, outer dict is of size 3 and contains values
         # for every vertical scale factor, inner list contains an zero offset per channel
         self.__zero_offsets: Dict[float, List[int]] = None
 
-        self.__out = None
-        self.__in = None
+        self.__out = None  # the usb out endpoint
+        self.__in = None  # the usb in endpoint
         self._dev = None  # the usb device
         self._cfg = None  # the used usb configuration
         self._intf = None  # the used usb interface
@@ -94,18 +100,12 @@ class Hantek1008:
         self.__out = usb.util.find_descriptor(
             self._intf,
             # match the first OUT endpoint
-            custom_match= \
-                lambda e: \
-                    usb.util.endpoint_direction(e.bEndpointAddress) == \
-                    usb.util.ENDPOINT_OUT)
+            custom_match=lambda e: usb.util.endpoint_direction(e.bEndpointAddress) == usb.util.ENDPOINT_OUT)
 
         self.__in = usb.util.find_descriptor(
             self._intf,
             # match the first IN endpoint
-            custom_match= \
-                lambda e: \
-                    usb.util.endpoint_direction(e.bEndpointAddress) == \
-                    usb.util.ENDPOINT_IN)
+            custom_match=lambda e: usb.util.endpoint_direction(e.bEndpointAddress) == usb.util.ENDPOINT_IN)
 
         assert self.__out is not None
         assert self.__in is not None
@@ -122,8 +122,8 @@ class Hantek1008:
         # while time.time() - start < sleep_time: # loop to guarantee delay is at least past
         #    time.sleep(sleep_time)
 
-    def __write_and_receive(self, message, response_length,
-                          sec_till_response_request=0.002, sec_till_start=0.002) -> bytes:
+    def __write_and_receive(self, message: bytes, response_length: int,
+                            sec_till_response_request: float = 0.002, sec_till_start: float = 0.002) -> bytes:
         """write and read from the device"""
         start_time = time.time()
 
@@ -144,8 +144,9 @@ class Hantek1008:
 
         return response
 
-    def __send_cmd(self, cmd_id, parameter=b'', response_length=0, echo_expected=True,
-                   sec_till_response_request=0, sec_till_start=0.002) -> bytes:
+    def __send_cmd(self, cmd_id: int, parameter: bytes or List[int] or str = b'',
+                   response_length: int = 0, echo_expected: bool = True,
+                   sec_till_response_request: float = 0, sec_till_start: float = 0.002) -> bytes:
         """sends a command to the device and checks if the device echos the command id"""
         if isinstance(parameter, str):
             parameter = to_hex_array(parameter)
@@ -153,9 +154,11 @@ class Hantek1008:
             parameter = bytes(parameter)
         assert isinstance(parameter, bytes)
         assert 0 <= cmd_id <= 255
+
         msg = bytes([cmd_id]) + parameter
         response = self.__write_and_receive(msg, response_length + (1 if echo_expected else 0),
-                                            sec_till_response_request=sec_till_response_request)
+                                            sec_till_response_request=sec_till_response_request,
+                                            sec_till_start=sec_till_start)
         if echo_expected:
             assert response[0] == cmd_id
             return response[1:]
@@ -232,7 +235,8 @@ class Hantek1008:
         self.__send_cmd(0xb7, parameter=to_hex_array("00"))  # 183
         self.__send_cmd(0xbb, parameter=to_hex_array("08 00"))  # 187
 
-        response = self.__send_cmd(0xb5, response_length=64, echo_expected=False, sec_till_response_request=0.0193)  # 181
+        response = self.__send_cmd(0xb5, response_length=64, echo_expected=False,
+                                   sec_till_response_request=0.0193)  # 181
         assert response == to_hex_array("00080008000800080008000800080008d407c907ef07cd07df07eb07c707d707"
                                         "e107d207f007d807e607ed07d507e207f607e007f007e907f007ef07ea07f207")
 
@@ -362,7 +366,7 @@ class Hantek1008:
             vscale = self.__vertical_scale_factors[channel_id]
         return self.__zero_offsets[vscale][channel_id]
 
-    def request_samples_normal_mode(self) -> List[List[float]]:
+    def request_samples_normal_mode(self) -> Tuple[List[List[float]]]:
         """get the data"""
         self.__send_cmd(0xf3)
 
@@ -405,7 +409,7 @@ class Hantek1008:
                 yield v
 
     def request_samples_roll_mode(self, sampling_rate: int = 440, raw: bool = False) -> List[List[float]]:
-        assert sampling_rate in Hantek1008.valid_roll_sampling_rates(),\
+        assert sampling_rate in Hantek1008.valid_roll_sampling_rates(), \
             f"sample_rate must be in {Hantek1008.valid_roll_sampling_rates()}"
 
         try:
@@ -449,7 +453,6 @@ class Hantek1008:
                     # in rolling mode there is an additional 9th channel, with values around 1742
                     channel_volts = self.__extract_channel_volts(sample_response, channel_count=9)
                     yield channel_volts[0:8]  # remove strange 9th channel
-                    # yield self.__from_bytes_to_shorts(sample_response)
         except GeneratorExit:
             # TODO: auto start pause tread?
             pass
@@ -470,11 +473,11 @@ class Hantek1008:
         # ch1 to ch4 start with down, ch5 to ch8 start up
         assert len(waveform) <= 0xFFFF
         assert len(waveform) <= 62, "Currently not supported"
-        assert all(b <=0xFF for b in waveform)
+        assert all(b <= 0xFF for b in waveform)
 
-        self.__send_cmd(0xb7, parameter=[len(waveform)%256, len(waveform)>>8])
+        self.__send_cmd(0xb7, parameter=[len(waveform) % 256, len(waveform) >> 8])
 
-        zeros = [0] *(62 - len(waveform))
+        zeros = [0] * (62 - len(waveform))
         self.__send_cmd(0xbf, parameter=[0x01] + waveform + zeros)
 
     __pause_thread = None
@@ -532,10 +535,13 @@ class Hantek1008:
     def get_vscales(self) -> List[float]:
         return copy.deepcopy(list(self.__vertical_scale_factors))
 
-    def __extract_channel_volts(self, data: bytes, channel_count: int = 8) -> List[List[int]]:
+    def __extract_channel_volts(self, data: bytes, channel_count: int = 8) -> List[List[float]]:
         """Extract the voltage values from the raw byte array that came from the device"""
         shorts = self.__from_bytes_to_shorts(data)
         per_channel_lists = self.__to_per_channel_lists(shorts, channel_count)
+        if self.__zero_offset_shift_compensation_channel is not None:
+            self.__update_zero_offset_compensation_value(
+                per_channel_lists[self.__zero_offset_shift_compensation_channel])
         return [self.__shorts_to_volt(channel_data, ch) for ch, channel_data in enumerate(per_channel_lists)]
 
     def __from_bytes_to_shorts(self, data: bytes) -> List[int]:

@@ -2,7 +2,7 @@ import usb.core
 import usb.util
 import usb.backend
 import time
-from typing import List, Dict, Tuple
+from typing import Union, Optional, List, Dict, Tuple
 import logging as log
 import math
 from threading import Thread
@@ -37,13 +37,13 @@ class Hantek1008:
     # channel names are one based
 
     __MAX_PACKAGE_SIZE: int = 64
-    __VSCALE_FACTORS: List[int] = [0.02, 0.125, 1.0]
+    __VSCALE_FACTORS: List[float] = [0.02, 0.125, 1.0]
     __roll_mode_sampling_rate_to_id_dic: Dict[int, int] = {440: 0x18, 220: 0x19, 88: 0x1a, 44: 0x1b, 22: 0x1c}
 
     def __init__(self, ns_per_div: int = 500_000,
-                 vertical_scale_factor: float or List[float] = 1.0,
-                 correction_data: CorrectionDataType or None = None,
-                 zero_offset_shift_compensation_channel: int or None = None):
+                 vertical_scale_factor: Union[float, List[float]] = 1.0,
+                 correction_data: Optional[CorrectionDataType] = None,
+                 zero_offset_shift_compensation_channel: Optional[int] = None):
         """
         :param ns_per_div: 
         :param vertical_scale_factor: must be an array of length 8 with a float scale value for each channel. 
@@ -67,7 +67,7 @@ class Hantek1008:
         # usecase: __correction_data[channel_id][vscale][..] = {"units":..., "factor": ...}
         self.__correction_data: CorrectionDataType = copy.deepcopy(correction_data)
 
-        self.__zero_offset_shift_compensation_channel: int or None = zero_offset_shift_compensation_channel
+        self.__zero_offset_shift_compensation_channel: Optional[int] = zero_offset_shift_compensation_channel
         self.__zero_offset_shift_compensation_value: float = 0.0
 
         # dict of list of shorts, outer dict is of size 3 and contains values
@@ -79,6 +79,9 @@ class Hantek1008:
         self._dev = None  # the usb device
         self._cfg = None  # the used usb configuration
         self._intf = None  # the used usb interface
+
+        self.__pause_thread = None
+        self.__cancel_pause_thread = False
 
     def connect(self):
         """Looks for a plugged hantek 1008c device and set ups the connection to it"""
@@ -110,7 +113,7 @@ class Hantek1008:
         assert self.__out is not None
         assert self.__in is not None
 
-    def __sleep(self, sleep_time=0.002):
+    def __sleep(self, sleep_time: float=0.002):
         """
         Sleeps sleep_time seconds
         defaults to: delay between the commands send in windows software (is about 2 ms)
@@ -144,7 +147,7 @@ class Hantek1008:
 
         return response
 
-    def __send_cmd(self, cmd_id: int, parameter: bytes or List[int] or str = b'',
+    def __send_cmd(self, cmd_id: int, parameter: Union[bytes, List[int], str] = b'',
                    response_length: int = 0, echo_expected: bool = True,
                    sec_till_response_request: float = 0, sec_till_start: float = 0.002) -> bytes:
         """sends a command to the device and checks if the device echos the command id"""
@@ -165,14 +168,14 @@ class Hantek1008:
         else:
             return response
 
-    def __send_c6_a6_command(self, parameter: int):
+    def __send_c6_a6_command(self, parameter: int) -> bytes:
         """send the c602 or c603 command, then parse the response as sample_length. then follow CEIL(sample_length/64) 
         a602 or a603 request. The responses are concatenated and finally returned trimmed to the fit the sample_length.
         """
         assert parameter in [2, 3]
         response = self.__send_cmd(0xc6, parameter=[parameter], response_length=2, echo_expected=False)
         sample_length = int(response.hex(), 16)
-        sample_packages_count = math.ceil(sample_length / self.__MAX_PACKAGE_SIZE)
+        sample_packages_count = int(math.ceil(sample_length / self.__MAX_PACKAGE_SIZE))
         # print("sample_length: {} -> {} packages".format(sample_length, sample_packages_count))
         samples = b''
         for _ in range(sample_packages_count):
@@ -366,7 +369,7 @@ class Hantek1008:
             vscale = self.__vertical_scale_factors[channel_id]
         return self.__zero_offsets[vscale][channel_id]
 
-    def request_samples_normal_mode(self) -> Tuple[List[List[float]]]:
+    def request_samples_normal_mode(self) -> Tuple[List[List[float]], List[List[float]]]:
         """get the data"""
         assert self.__zero_offset_shift_compensation_channel is None, \
             "zero offset shift compensation is not implemented for normal mode"
@@ -403,7 +406,7 @@ class Hantek1008:
         return copy.deepcopy(list(Hantek1008.__roll_mode_sampling_rate_to_id_dic.keys()))
 
     @staticmethod
-    def valid_vscale_factors() -> List[int]:
+    def valid_vscale_factors() -> List[float]:
         return copy.deepcopy(Hantek1008.__VSCALE_FACTORS)
 
     def request_samples_roll_mode_single_row(self, sampling_rate: int = 440, raw: bool = False) -> List[List[float]]:
@@ -481,7 +484,7 @@ class Hantek1008:
             zero_offset += self.__zero_offset_shift_compensation_value
         return zero_offset
 
-    def set_generator_on(self, turn_on: bool):
+    def set_generator_on(self, turn_on: bool) -> None:
         # TODO not tested
         if turn_on:
             self.__send_cmd(0xb9, parameter=to_hex_array("01b0040000"))
@@ -503,9 +506,6 @@ class Hantek1008:
 
         zeros = [0] * (62 - len(waveform))
         self.__send_cmd(0xbf, parameter=[0x01] + waveform + zeros)
-
-    __pause_thread = None
-    __cancel_pause_thread = None
 
     def __loop_f3(self) -> None:
         log.debug("start pause thread")
@@ -599,7 +599,7 @@ class Hantek1008:
             , ndigits=accuracy)
             for v in shorts]
 
-    def __calc_correction_factor(self, delta_to_zero: float, channel_id: float, vscale: float) -> float:
+    def __calc_correction_factor(self, delta_to_zero: float, channel_id: int, vscale: float) -> float:
         if channel_id >= 8 or vscale not in self.__correction_data[channel_id]:
             return 1.0
         channel_cd = self.__correction_data[channel_id][vscale]

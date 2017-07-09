@@ -260,6 +260,14 @@ def calibration_routine(device: Hantek1008, calibrate_file_path: str):
 
 if __name__ == "__main__":
 
+    description = f"""\
+Collect data from device 'Hantek 1008'. Usage examples:
+    * Save data sampled with 22 Hz in file 'my_data.csv':
+        {sys.argv[0]} my_data.csv --channels 1 2 --samplingrate 22
+    * Create and fill calibration file 'my_cal.json':
+        {sys.argv[0]} --calibrate my_cal.json
+"""
+
     def channel_type(value):
         ivalue = int(value)
         if 1 <= ivalue <= 8:
@@ -268,13 +276,19 @@ if __name__ == "__main__":
 
     str_to_log_level = {log.getLevelName(ll).lower(): ll for ll in [log.DEBUG, log.INFO, log.WARN]}
 
-    parser = argparse.ArgumentParser(description="Collect data from device 'Hantek 1008'")
-    parser.add_argument(metavar='csv_path', dest='csv_path',
-                        type=str, default=None,
-                        help='Exports measured data to the given file in CSV format.'
-                             " If filename ends with '.xz' the content is compress using lzma/xz."
-                             " This reduces the filesize to ~ 1/12 compered to the uncompressed format."
-                             " Those files can be decompressed using 'xz -dk <filename>")
+    parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
+                                     description=description)
+    command_group = parser.add_mutually_exclusive_group(required=True)
+    command_group.add_argument(metavar='csv_path', dest='csv_path', nargs='?',
+                               type=str, default=None,
+                               help='Exports measured data to the given file in CSV format.'
+                                    " If filename ends with '.xz' the content is compress using lzma/xz."
+                                    " This reduces the filesize to ~ 1/12 compered to the uncompressed format."
+                                    " Those files can be decompressed using 'xz -dk <filename>")
+    command_group.add_argument('--calibrate', metavar='calibrationfile_path', nargs='?',
+                               type=str, default=None,
+                               help='If set calibrates the device and write calibration values to given file.'
+                                    ' Ignores all other args')
     parser.add_argument('-s', '--channels', metavar='channel', nargs='+',
                         type=channel_type, default=list(range(1, 9)),
                         help="Select channels that are of interest")
@@ -286,10 +300,6 @@ if __name__ == "__main__":
                         help='Set the pre scale in the hardware, must be 1, 0.125, or 0.02. If one value is given, all '
                              'selected channels will use that vscale, otherwise there must be one value per selected'
                              'channel')
-    parser.add_argument('--calibrate', metavar='calibrationfile_path',
-                        type=str, default=None,
-                        help='If set calibrates the device and write calibration values to given file.'
-                             ' Ignores all other args')
     parser.add_argument('-c', '--calibrationfile', dest="calibration_file_path", metavar='calibrationfile_path',
                         type=str, default=None,
                         help="Use the content of the given calibration file to correct the measured samples")
@@ -303,7 +313,7 @@ if __name__ == "__main__":
                         help='Compensate the zero offset shift that obscures over longer timescales. Needs at least'
                              ' one unused channel, make sure that no voltage is applied to the given channel. '
                              'Defaults to no compensation, if used without an argument channel 8 is used')
-    parser.add_argument('-a', '--samplingrate', dest='sampling_rate',
+    parser.add_argument('-f', '--samplingrate', dest='sampling_rate',
                         type=int, default=440, choices=Hantek1008.valid_roll_sampling_rates(),
                         help='Set the sampling rate of the device in Hz (default:440)')
 
@@ -313,9 +323,7 @@ if __name__ == "__main__":
 
     def arg_assert(ok, fail_message):
         if not ok:
-            parser.print_usage()
-            print(fail_message, file=sys.stderr)
-            sys.exit(1)
+            parser.error(fail_message)
 
     arg_assert(len(args.vscale) == 1 or len(args.vscale) == len(args.channels),
                "There must be one vscale factor or as many as selected channels")

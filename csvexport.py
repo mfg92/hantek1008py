@@ -269,15 +269,16 @@ if __name__ == "__main__":
                              " This reduces the filesize to ~ 1/12 compered to the uncompressed format."
                              " Those files can be decompressed using 'xz -dk <filename>")
     parser.add_argument('-s', '--channels', metavar='channel', nargs='+',
-                        type=channel_type,
+                        type=channel_type, default=list(range(1, 9)),
                         help="Select channels that are of interest")
     parser.add_argument('-l', '--loglevel', dest='log_level', nargs='?',
                         type=str, default="info", choices=str_to_log_level.keys(),
                         help='Set the loglevel to debug')
     parser.add_argument('-v', '--vscale', metavar='scale', nargs="+",
-                        type=float, default=1.0, choices=Hantek1008.valid_vscale_factors(),
+                        type=float, default=[1.0], choices=Hantek1008.valid_vscale_factors(),
                         help='Set the pre scale in the hardware, must be 1, 0.125, or 0.02. If one value is given, all '
-                             'channels will use that vscale, otherwise there must be one value per selected channel')
+                             'selected channels will use that vscale, otherwise there must be one value per selected'
+                             'channel')
     parser.add_argument('--calibrate', metavar='calibrationfile_path',
                         type=str, default=None,
                         help='If set calibrates the device and write calibration values to given file.'

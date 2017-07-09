@@ -159,8 +159,8 @@ def main(csv_file_path: str,
             csv_file.write(f"# zero_offset [{vscale:<4}]: {' '.join([str(round(v, 1)) for v in zero_offset])}\n")
 
         if roll_mode:
-            for channel_data in device.request_samples_roll_mode(raw=raw, sampling_rate=sampling_rate):
-                channel_data = [d for i, d in enumerate(channel_data) if i in selected_channels]
+            for channel_data in device.request_samples_roll_mode(mode=raw_or_volt, sampling_rate=sampling_rate):
+                channel_data = [channel_data[ch] for ch in selected_channels]
                 milli_volt_int_representation = False
                 if milli_volt_int_representation:
                     channel_data = [[f"{round(value*1000)}" for value in single_channel]

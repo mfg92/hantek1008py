@@ -141,6 +141,9 @@ def main(csv_file_path: str,
     quit()
     """
 
+    if raw_or_volt == "volt+raw":  # add the coresponding raw values to the selected channel list
+        selected_channels += [sc + 8 for sc in selected_channels]
+
     try:
         # output_csv_filename = "channel_data.csv"
         if csv_file_path == '-':
@@ -153,7 +156,9 @@ def main(csv_file_path: str,
             log.info(f"Exporting data to file '{csv_file_path}'...")
             csv_file = open(csv_file_path, 'at', newline='')
         csv_writer = csv.writer(csv_file, delimiter=',')
-        csv_file.write(f"# {', '.join([ f'ch_{i + 1}' for i in selected_channels])}\n")
+        # channel >= 8 are the raw values of the corresponding channels < 8
+        channel_titles = [f'ch_{i+1 if i < 8 else (str(i+1-8)+"_raw")}' for i in selected_channels]
+        csv_file.write(f"# {', '.join(channel_titles)}\n")
         csv_file.write("# Calibration data:\n")
         for vscale, zero_offset in sorted(device.get_calibration_data().items()):
             csv_file.write(f"# zero_offset [{vscale:<4}]: {' '.join([str(round(v, 1)) for v in zero_offset])}\n")
@@ -231,7 +236,7 @@ def calibration_routine(device: Hantek1008, calibrate_file_path: str):
             data = []
             for _, row in zip(
                     range(required_calibration_samples_nun),
-                    device.request_samples_roll_mode_single_row(raw=True)):
+                    device.request_samples_roll_mode_single_row(mode="raw")):
                 data.append(row)
                 pass
 
@@ -288,10 +293,11 @@ if __name__ == "__main__":
     parser.add_argument('-c', '--calibrationfile', dest="calibration_file_path", metavar='calibrationfile_path',
                         type=str, default=None,
                         help="Use the content of the given calibration file to correct the measured samples")
-    parser.add_argument('-r', '--raw', dest="raw",
-                        action='store_const', default=False, const=True,
-                        help='Outputs the sample values return from the device, without transformation'
-                             ' to volts or any calibration data used')
+    parser.add_argument('-r', '--raw', dest="raw_or_volt",
+                        type=str, default="volt", const="raw", nargs='?', choices=["raw", "volt", "volt+raw"],
+                        help="Specifies whether the sample values return from the device should be transformed"
+                             " to volts (eventually using calibration data) or not. If flag is not set, it defaults"
+                             "to'volt'. If flag is set without a parameter 'raw' is used")
     parser.add_argument('-z', '--zoscompensation', dest="zos_compensation", metavar='channel',
                         type=channel_type, default=None, const=8, nargs='?',
                         help='Compensate the zero offset shift that obscures over longer timescales. Needs at least'
@@ -315,10 +321,10 @@ if __name__ == "__main__":
                "There must be one vscale factor or as many as selected channels")
     arg_assert(len(set(args.channels)) == len(args.channels),
                "Selected channels list is not a set (multiple occurrences of the same channel id")
-    arg_assert(args.calibration_file_path is None or not args.raw,
-               "--calibrationfile can not be used together with the --raw flag")
-    arg_assert(args.zos_compensation is None or not args.raw,
-               "--zoscompensation can not be used together with the --raw flag")
+    arg_assert(args.calibration_file_path is None or not args.raw_or_volt.contains("volt"),
+               "--calibrationfile can not be used together with the '--raw volt' flag")
+    arg_assert(args.zos_compensation is None or not args.raw_or_volt.contains("volt"),
+               "--zoscompensation can not be used together with the '--raw volt' flag")
     arg_assert(args.zos_compensation is None or len(args.channels) < 8,
                "Zero-offset-shift-compensation is only possible if there is at least one unused channel")
     arg_assert(args.zos_compensation is None or args.zos_compensation not in args.channels,
@@ -332,6 +338,6 @@ if __name__ == "__main__":
          csv_file_path=args.csv_path,
          calibrate_output_file_path=args.calibrate,
          calibration_file_path=args.calibration_file_path,
-         raw=args.raw,
+         raw_or_volt=args.raw_or_volt,
          zero_offset_shift_compensation_channel=args.zos_compensation,
          sampling_rate=args.sampling_rate)

@@ -412,14 +412,15 @@ class Hantek1008:
     def valid_vscale_factors() -> List[float]:
         return copy.deepcopy(Hantek1008.__VSCALE_FACTORS)
 
-    def request_samples_roll_mode_single_row(self, sampling_rate: int = 440, raw: bool = False) -> List[List[float]]:
-        for channel_data in self.request_samples_roll_mode(sampling_rate=sampling_rate, raw=raw):
+    def request_samples_roll_mode_single_row(self, **argv) -> List[List[float]]:
+        for channel_data in self.request_samples_roll_mode(**argv):
             for v in zip(*channel_data):
                 yield v
 
-    def request_samples_roll_mode(self, sampling_rate: int = 440, raw: bool = False) -> List[List[float]]:
+    def request_samples_roll_mode(self, sampling_rate: int = 440, mode: str = "volt") -> List[List[float]]:
         assert sampling_rate in Hantek1008.valid_roll_sampling_rates(), \
             f"sample_rate must be in {Hantek1008.valid_roll_sampling_rates()}"
+        assert mode in ["volt", "raw", "volt+raw"]
 
         try:
             # sets the sample rate: 18 -> 440 samples/sec/channel
@@ -455,13 +456,14 @@ class Hantek1008:
                     ready_data_length -= 64
                     sample_response += sample_response_part
 
-                if raw:
-                    yield self.__to_per_channel_lists(self.__from_bytes_to_shorts(sample_response), 9)[
-                          0:8]  # remove strange 9th channel
-                else:
-                    # in rolling mode there is an additional 9th channel, with values around 1742
-                    channel_volts = self.__extract_channel_volts(sample_response, channel_count=9)
-                    yield channel_volts[0:8]  # remove strange 9th channel
+                # in rolling mode there is an additional 9th channel, with values around 1742
+                # this channel will not be past to the caller
+                result = []
+                if "volt" in mode:
+                    result = self.__extract_channel_volts(sample_response, channel_count=9)[:8]
+                if "raw" in mode:
+                    result += self.__to_per_channel_lists(self.__from_bytes_to_shorts(sample_response), 9)[:8]
+                yield result
         except GeneratorExit:
             # TODO: auto start pause tread?
             pass

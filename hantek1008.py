@@ -7,6 +7,9 @@ import logging as log
 import math
 from threading import Thread
 import copy
+import sys
+
+assert sys.version_info >= (3, 6)
 
 """
  To get acces to the USB Device:

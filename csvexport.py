@@ -11,6 +11,8 @@ import lzma
 import sys
 import csv
 
+assert sys.version_info >= (3, 6)
+
 
 def main(csv_file_path: str,
          selected_channels: Optional[List[int]]=None,
@@ -19,7 +21,7 @@ def main(csv_file_path: str,
          calibrate_output_file_path: Optional[str]=None,
          calibration_file_path: Optional[str]=None,
          zero_offset_shift_compensation_channel: Optional[int]=None,
-         raw: bool=False,
+         raw_or_volt: str="volt",
          sampling_rate: int=440) -> None:
 
     if selected_channels is None or len(selected_channels) == 0:

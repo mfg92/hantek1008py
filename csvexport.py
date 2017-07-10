@@ -120,7 +120,7 @@ def main(csv_file_path: str,
     if calibrate_output_file_path:
         calibration_routine(device, calibrate_output_file_path)
         device.close()
-        quit()
+        sys.exit()
 
     log.info(f"Processing data of channel{'' if len(selected_channels) == 1 else 's'}:"
              f" {' '.join([str(i+1) for i in selected_channels])}")
@@ -265,7 +265,7 @@ Collect data from device 'Hantek 1008'. Usage examples:
     * Save data sampled with 22 Hz in file 'my_data.csv':
         {sys.argv[0]} my_data.csv --channels 1 2 --samplingrate 22
     * Create and fill calibration file 'my_cal.json':
-        {sys.argv[0]} --calibrate my_cal.json
+        {sys.argv[0]} --calibrate my_cal.cd.json
 """
 
     def channel_type(value):

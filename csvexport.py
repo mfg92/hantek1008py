@@ -159,7 +159,9 @@ def main(csv_file_path: str,
         # channel >= 8 are the raw values of the corresponding channels < 8
         channel_titles = [f'ch_{i+1 if i < 8 else (str(i+1-8)+"_raw")}' for i in selected_channels]
         csv_file.write(f"# {', '.join(channel_titles)}\n")
-        csv_file.write("# Calibration data:\n")
+        csv_file.write(f"# samplingrate: {sampling_rate} Hz\n")
+        csv_file.write(f"# vscale: {', '.join(str(f) for f in vertical_scale_factor)} Hz\n")
+        csv_file.write("# calibration data:\n")
         for vscale, zero_offset in sorted(device.get_calibration_data().items()):
             csv_file.write(f"# zero_offset [{vscale:<4}]: {' '.join([str(round(v, 1)) for v in zero_offset])}\n")
 

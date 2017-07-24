@@ -22,7 +22,8 @@ def main(csv_file_path: str,
          calibration_file_path: Optional[str]=None,
          zero_offset_shift_compensation_channel: Optional[int]=None,
          raw_or_volt: str="volt",
-         sampling_rate: int=440) -> None:
+         sampling_rate: int=440,
+         do_sampling_rate_measure: bool=True) -> None:
 
     if selected_channels is None or len(selected_channels) == 0:
         selected_channels = list(range(1, 9))
@@ -114,32 +115,22 @@ def main(csv_file_path: str,
         log.info("Initialisation completed")
     except KeyboardInterrupt:
         device.close()
-        sys.exit(1)
-        pass
+        sys.exit(0)
 
     if calibrate_output_file_path:
         calibration_routine(device, calibrate_output_file_path)
         device.close()
         sys.exit()
 
+    measured_sampling_rate = None
+    if do_sampling_rate_measure:
+        measurment_duration = 10
+        log.info(f"Measure sample rate of device (takes about {measurment_duration} sec) ...")
+        measured_sampling_rate = measure_sampling_rate(device, sampling_rate, measurment_duration)
+        log.info(f"-> {measured_sampling_rate:.4f} Hz")
+
     log.info(f"Processing data of channel{'' if len(selected_channels) == 1 else 's'}:"
              f" {' '.join([str(i+1) for i in selected_channels])}")
-
-    """
-    # measure sample rate
-    start_time = time.time()
-    counter = 0
-    for data in device.request_samples_roll_mode():
-        #print(data[-1+1])
-        counter += len(data[0])
-        if counter >= 1000:
-            break
-
-    duration = time.time()-start_time
-    print("duration: {}, samples: {}".format(duration, counter))
-    print("-> {}".format(counter/duration))
-    quit()
-    """
 
     if raw_or_volt == "volt+raw":  # add the coresponding raw values to the selected channel list
         selected_channels += [sc + 8 for sc in selected_channels]
@@ -160,6 +151,8 @@ def main(csv_file_path: str,
         channel_titles = [f'ch_{i+1 if i < 8 else (str(i+1-8)+"_raw")}' for i in selected_channels]
         csv_file.write(f"# {', '.join(channel_titles)}\n")
         csv_file.write(f"# samplingrate: {sampling_rate} Hz\n")
+        if measured_sampling_rate:
+            csv_file.write(f"# measured samplingrate: {measured_sampling_rate} Hz\n")
         csv_file.write(f"# vscale: {', '.join(str(f) for f in vertical_scale_factor)} Hz\n")
         csv_file.write("# calibration data:\n")
         for vscale, zero_offset in sorted(device.get_calibration_data().items()):
@@ -193,6 +186,26 @@ def main(csv_file_path: str,
     log.info("Exporting data finished")
 
     device.close()
+
+
+def measure_sampling_rate(device: Hantek1008, used_sampling_rate: int, measurment_duration: float) -> float:
+    requiered_samples = int(measurment_duration * used_sampling_rate)
+    counter = -1
+    for data in device.request_samples_roll_mode():
+        if counter == -1:  # skip first samples to ignore the duration of initialisation
+            # start_time = time.time()
+            start_time = time.perf_counter()
+            start_time2 = time.time()
+            counter = 0
+        counter += len(data[0])
+        if counter >= requiered_samples:
+            break
+
+    # duration = time.time()-start_time
+    duration = time.perf_counter() - start_time
+    duration2 = time.time() - start_time2
+    print(counter/duration2)
+    return counter/duration
 
 
 def calibration_routine(device: Hantek1008, calibrate_file_path: str):
@@ -317,7 +330,11 @@ Collect data from device 'Hantek 1008'. Usage examples:
                              'Defaults to no compensation, if used without an argument channel 8 is used')
     parser.add_argument('-f', '--samplingrate', dest='sampling_rate',
                         type=int, default=440, choices=Hantek1008.valid_roll_sampling_rates(),
-                        help='Set the sampling rate of the device in Hz (default:440)')
+                        help='Set the sampling rate (in Hz) the device should use (default:440)')
+    parser.add_argument('-m', '--measuresamplingrate', dest='do_sampling_rate_measure', action="store_const",
+                        default=False, const=True,
+                        help='Measure the exact samplingrate the device achieves by using the computer internal clock.'
+                             'Increases startup duration by ~10 sec')
 
     args = parser.parse_args()
 
@@ -350,4 +367,5 @@ Collect data from device 'Hantek 1008'. Usage examples:
          calibration_file_path=args.calibration_file_path,
          raw_or_volt=args.raw_or_volt,
          zero_offset_shift_compensation_channel=args.zos_compensation,
-         sampling_rate=args.sampling_rate)
+         sampling_rate=args.sampling_rate,
+         do_sampling_rate_measure=args.do_sampling_rate_measure)

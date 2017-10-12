@@ -2,7 +2,7 @@ import usb.core
 import usb.util
 import usb.backend
 import time
-from typing import Union, Optional, List, Dict, Tuple
+from typing import Union, Optional, List, Dict, Tuple, Callable
 import logging as log
 import math
 from threading import Thread
@@ -31,6 +31,10 @@ def to_hex_string(hex_array: bytes) -> str:
 
 CorrectionDataType = List[Dict[float, Dict[float, float]]]
 
+# a function that awaits an channel id [0,7], vscale and a deltatime (time in sec since creation of this class)
+# it computes a correction factor that can be applied (added) to the normal zero_offset
+ZeroOffsetShiftCompensationFunctionType = Callable[[int, float, float], float]
+
 
 class Hantek1008:
     """
@@ -46,7 +50,8 @@ class Hantek1008:
     def __init__(self, ns_per_div: int = 500_000,
                  vertical_scale_factor: Union[float, List[float]] = 1.0,
                  correction_data: Optional[CorrectionDataType] = None,
-                 zero_offset_shift_compensation_channel: Optional[int] = None):
+                 zero_offset_shift_compensation_channel: Optional[int] = None,
+                 zero_offset_shift_compensation_function: Optional[ZeroOffsetShiftCompensationFunctionType] = None):
         """
         :param ns_per_div: 
         :param vertical_scale_factor: must be an array of length 8 with a float scale value for each channel. 
@@ -57,7 +62,9 @@ class Hantek1008:
         assert isinstance(vertical_scale_factor, float) or len(vertical_scale_factor) == Hantek1008.channel_count()
         assert len(correction_data) == Hantek1008.channel_count()
         assert all(isinstance(x, dict) for x in correction_data)
-        assert zero_offset_shift_compensation_channel is None or zero_offset_shift_compensation_channel in range(0, 8)
+        assert zero_offset_shift_compensation_channel is None \
+               or zero_offset_shift_compensation_channel in Hantek1008.valid_channel_ids()
+        assert zero_offset_shift_compensation_channel is None or zero_offset_shift_compensation_function is None
 
         self.__ns_per_div: int = ns_per_div  # on value for all channels
 
@@ -72,6 +79,10 @@ class Hantek1008:
 
         self.__zero_offset_shift_compensation_channel: Optional[int] = zero_offset_shift_compensation_channel
         self.__zero_offset_shift_compensation_value: float = 0.0
+
+        self.__zero_offset_shift_compensation_function: ZeroOffsetShiftCompensationFunctionType \
+            = zero_offset_shift_compensation_function
+        self.__start_monotonic_time = time.monotonic()
 
         # dict of list of shorts, outer dict is of size 3 and contains values
         # for every vertical scale factor, inner list contains an zero offset per channel
@@ -365,11 +376,6 @@ class Hantek1008:
         # copy dict and return it
         return copy.deepcopy(self.__zero_offsets)
 
-    def get_zero_offset(self, channel_id: int, vscale: float = None) -> float:
-        if vscale is None:
-            vscale = self.__vertical_scale_factors[channel_id]
-        return self.__zero_offsets[vscale][channel_id]
-
     def request_samples_normal_mode(self) -> Tuple[List[List[float]], List[List[float]]]:
         """get the data"""
         assert self.__zero_offset_shift_compensation_channel is None, \
@@ -489,10 +495,19 @@ class Hantek1008:
                 + adaption_factor * delta
         print("zosc-value", self.__zero_offset_shift_compensation_value)
 
-    def __get_zero_offset(self, channel_id: int, vscale: float) -> float:
+    def get_zero_offset(self, channel_id: int, vscale: Optional[float]) -> float:
+        assert channel_id in Hantek1008.valid_channel_ids()
+        assert vscale is None or vscale in Hantek1008.valid_vscale_factors()
+
+        if vscale is None:
+            vscale = self.__vertical_scale_factors[channel_id]
+
         zero_offset = self.__zero_offsets[vscale][channel_id]
         if self.__zero_offset_shift_compensation_channel is not None:
             zero_offset += self.__zero_offset_shift_compensation_value
+        if self.__zero_offset_shift_compensation_function is not None:
+            delta_sec = time.monotonic() - self.__start_monotonic_time
+            zero_offset += self.__zero_offset_shift_compensation_function(channel_id, vscale, delta_sec)
         return zero_offset
 
     def set_generator_on(self, turn_on: bool) -> None:
@@ -599,8 +614,7 @@ class Hantek1008:
         if channel_id < len(self.__vertical_scale_factors):
             vscale = self.__vertical_scale_factors[channel_id]
             # get right zero offset for that channel and the used vertical scale factor (vscale)
-            # zero_offset = self.__zero_offsets[vscale][channel_id]
-            zero_offset = self.__get_zero_offset(channel_id, vscale)
+            zero_offset = self.get_zero_offset(channel_id, vscale)
 
         scale = 0.01 * vscale
 

@@ -53,17 +53,17 @@ class Hantek1008:
         Or a single float, than all channel will have that scale factor. The float must be 1.0, 0.2 or 0.02.
         """
         if correction_data is None:
-            correction_data = [{} for _ in range(8)]
-        assert isinstance(vertical_scale_factor, float) or len(vertical_scale_factor) == 8
-        assert len(correction_data) == 8
+            correction_data = [{} for _ in range(Hantek1008.channel_count())]
+        assert isinstance(vertical_scale_factor, float) or len(vertical_scale_factor) == Hantek1008.channel_count()
+        assert len(correction_data) == Hantek1008.channel_count()
         assert all(isinstance(x, dict) for x in correction_data)
         assert zero_offset_shift_compensation_channel is None or zero_offset_shift_compensation_channel in range(0, 8)
 
         self.__ns_per_div: int = ns_per_div  # on value for all channels
 
         # on vertical scale factor (float) per channel
-        self.__vertical_scale_factors: List[float] = [vertical_scale_factor] * 8 if isinstance(vertical_scale_factor,
-                                                                                               float) \
+        self.__vertical_scale_factors: List[float] = [vertical_scale_factor] * Hantek1008.channel_count()\
+            if isinstance(vertical_scale_factor, float)\
             else copy.deepcopy(vertical_scale_factor)  # scale factor per channel
 
         # list of dicts of lists of dicts
@@ -183,7 +183,6 @@ class Hantek1008:
         samples = b''
         for _ in range(sample_packages_count):
             response = self.__send_cmd(0xa6, parameter=[parameter], response_length=64, echo_expected=False)
-            # sec_till_start=0, sec_till_response_request=0)
             samples += response
         return samples[0:sample_length]
 
@@ -209,11 +208,13 @@ class Hantek1008:
         time_per_div_id = {1: 0, 2: 1, 5: 2}[int(str(ns_per_div)[0])] + int(math.log10(ns_per_div)) * 3
         self.__send_cmd(0xa3, parameter=[time_per_div_id])
 
-    def __vertical_scale_id_to_factor(self, vs_id: int):
+    @staticmethod
+    def __vertical_scale_id_to_factor(vs_id: int):
         assert 1 <= vs_id <= len(Hantek1008.__VSCALE_FACTORS)
         return Hantek1008.__VSCALE_FACTORS[vs_id - 1]
 
-    def __vertical_scale_factor_to_id(self, vs_factor: float):
+    @staticmethod
+    def __vertical_scale_factor_to_id(vs_factor: float):
         assert vs_factor in Hantek1008.__VSCALE_FACTORS
         return Hantek1008.__VSCALE_FACTORS.index(vs_factor) + 1
 
@@ -223,7 +224,7 @@ class Hantek1008:
         scale_factor must be an array of length 8 with a float scale value for each channel. 
         Or a single float, than all channel will have that scale factor"""
         assert all(x in Hantek1008.__VSCALE_FACTORS for x in scale_factors)
-        scale_factors = [self.__vertical_scale_factor_to_id(sf) for sf in scale_factors]
+        scale_factors = [Hantek1008.__vertical_scale_factor_to_id(sf) for sf in scale_factors]
         self.__send_cmd(0xa2, parameter=scale_factors, sec_till_response_request=0.2132)
 
     def init(self):
@@ -271,7 +272,6 @@ class Hantek1008:
 
         self.__send_cmd(0xaa, parameter=to_hex_array("0101010101010101"))
 
-        # self.send_cmd(0xa3, parameter=to_hex_array("11"))
         self.__send_set_time_div(500 * 1000)  # 500us, the default value in the windows software
 
         self.__send_cmd(0xc1, parameter=to_hex_array("0000"))
@@ -285,13 +285,11 @@ class Hantek1008:
         """calibrate"""
         self.__zero_offsets = {}
         for vscale_id in range(1, 4):
-            vscale = self.__vertical_scale_id_to_factor(vscale_id)
+            vscale = Hantek1008.__vertical_scale_id_to_factor(vscale_id)
 
             self.__send_cmd(0xf3)
 
-            # self.send_cmd(0xa2, parameter=to_hex_array("0101010101010101"))
-            # self.send_cmd(0xa2, parameter=[i+1]*8, sec_till_response_request=0.2132)
-            self.__send_set_vertical_scale([vscale] * 8)
+            self.__send_set_vertical_scale([vscale] * Hantek1008.channel_count())
 
             self.__send_cmd(0xa4, parameter=[0x01])
 
@@ -305,9 +303,9 @@ class Hantek1008:
             samples2 = self.__send_c6_a6_command(0x02)
             samples3 = self.__send_c6_a6_command(0x03)
             samples = samples2 + samples3
-            shorts = self.__from_bytes_to_shorts(samples)
+            shorts = Hantek1008.__from_bytes_to_shorts(samples)
             zero_offset_per_channel = [sum(channel_data) / float(len(channel_data))
-                                       for channel_data in self.__to_per_channel_lists(shorts)]
+                                       for channel_data in Hantek1008.__to_per_channel_lists(shorts)]
             self.__zero_offsets[vscale] = zero_offset_per_channel
 
     def _init3(self):
@@ -405,6 +403,14 @@ class Hantek1008:
         return channel_volts2, channel_volts3
 
     @staticmethod
+    def channel_count() -> int:
+        return 8
+
+    @staticmethod
+    def valid_channel_ids() -> List[int]:
+        return list(range(0, Hantek1008.channel_count()))
+
+    @staticmethod
     def valid_roll_sampling_rates() -> List[int]:
         return copy.deepcopy(list(Hantek1008.__roll_mode_sampling_rate_to_id_dic.keys()))
 
@@ -460,9 +466,9 @@ class Hantek1008:
                 # this channel will not be past to the caller
                 result = []
                 if "volt" in mode:
-                    result = self.__extract_channel_volts(sample_response, channel_count=9)[:8]
+                    result = self.__extract_channel_volts(sample_response, channel_count=9)[:Hantek1008.channel_count()]
                 if "raw" in mode:
-                    result += self.__to_per_channel_lists(self.__from_bytes_to_shorts(sample_response), 9)[:8]
+                    result += Hantek1008.__to_per_channel_lists(Hantek1008.__from_bytes_to_shorts(sample_response), 9)[:8]
                 yield result
         except GeneratorExit:
             # TODO: auto start pause tread?
@@ -566,18 +572,20 @@ class Hantek1008:
 
     def __extract_channel_volts(self, data: bytes, channel_count: int = 8) -> List[List[float]]:
         """Extract the voltage values from the raw byte array that came from the device"""
-        shorts = self.__from_bytes_to_shorts(data)
-        per_channel_lists = self.__to_per_channel_lists(shorts, channel_count)
+        shorts = Hantek1008.__from_bytes_to_shorts(data)
+        per_channel_lists = Hantek1008.__to_per_channel_lists(shorts, channel_count)
         if self.__zero_offset_shift_compensation_channel is not None:
             self.__update_zero_offset_compensation_value(
                 per_channel_lists[self.__zero_offset_shift_compensation_channel])
         return [self.__shorts_to_volt(channel_data, ch) for ch, channel_data in enumerate(per_channel_lists)]
 
+    @staticmethod
     def __from_bytes_to_shorts(self, data: bytes) -> List[int]:
         """Take two following bytes to build a integer (using little endianess) """
         assert len(data) % 2 == 0
         return [data[i] + data[i + 1] * 256 for i in range(0, len(data), 2)]
 
+    @staticmethod
     def __to_per_channel_lists(self, shorts: List[int], channel_count: int = 8) -> List[List[int]]:
         """Create a list (of the size of 'channel_count') of lists, 
         where the list at position x contains the data for channel x+1 of the hantek device """
@@ -596,7 +604,6 @@ class Hantek1008:
 
         scale = 0.01 * vscale
 
-        # math.log10(4096/2)
         accuracy = -int(math.log10(scale)) + 2  # amount of digits after the dot that is not nearly random
         return [round(
             self.__calc_correction_factor(v - zero_offset, channel_id, vscale)
@@ -605,7 +612,7 @@ class Hantek1008:
             for v in shorts]
 
     def __calc_correction_factor(self, delta_to_zero: float, channel_id: int, vscale: float) -> float:
-        if channel_id >= 8 or vscale not in self.__correction_data[channel_id]:
+        if channel_id not in Hantek1008.valid_channel_ids() or vscale not in self.__correction_data[channel_id]:
             return 1.0
         channel_cd = self.__correction_data[channel_id][vscale]
         if len(channel_cd) == 0:

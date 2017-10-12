@@ -6,6 +6,7 @@ from typing import Optional, List
 import logging as log
 import argparse
 import time
+import datetime
 import os
 import lzma
 import sys
@@ -153,7 +154,10 @@ def main(csv_file_path: str,
         csv_file.write(f"# samplingrate: {sampling_rate} Hz\n")
         if measured_sampling_rate:
             csv_file.write(f"# measured samplingrate: {measured_sampling_rate} Hz\n")
-        csv_file.write(f"# vscale: {', '.join(str(f) for f in vertical_scale_factor)} Hz\n")
+        now = datetime.datetime.now()
+        csv_file.write(f"# UNIX-Time: {now.timestamp()}\n")
+        csv_file.write(f"# UNIX-Time: {now.isoformat()}\n")
+        csv_file.write(f"# vscale: {', '.join(str(f) for f in vertical_scale_factor)}\n")
         csv_file.write("# calibration data:\n")
         for vscale, zero_offset in sorted(device.get_calibration_data().items()):
             csv_file.write(f"# zero_offset [{vscale:<4}]: {' '.join([str(round(v, 1)) for v in zero_offset])}\n")
@@ -166,7 +170,7 @@ def main(csv_file_path: str,
                     channel_data = [[f"{round(value*1000)}" for value in single_channel]
                                     for single_channel in channel_data]
                 csv_writer.writerows(zip(*channel_data))
-                csv_file.write(f"# UNIX-Time: {time.time()}\n")
+                csv_file.write(f"# UNIX-Time: {datetime.datetime.now().timestamp()}\n")
         else:
             while True:
                 channel_data2, channel_data3 = device.request_samples_normal_mode()
@@ -177,7 +181,7 @@ def main(csv_file_path: str,
 
                 csv_writer.writerows(zip(*channel_data2))
                 csv_writer.writerows(zip(*channel_data3))
-                csv_file.write(f"# UNIX-Time: {time.time()}\n")
+                csv_file.write(f"# UNIX-Time: { datetime.datetime.now().timestamp()}\n")
     except KeyboardInterrupt:
         log.info("Sample collection was canceled by user")
         pass
@@ -189,22 +193,17 @@ def main(csv_file_path: str,
 
 
 def measure_sampling_rate(device: Hantek1008, used_sampling_rate: int, measurment_duration: float) -> float:
-    requiered_samples = int(measurment_duration * used_sampling_rate)
+    required_samples = int(measurment_duration * used_sampling_rate)
     counter = -1
     for data in device.request_samples_roll_mode():
         if counter == -1:  # skip first samples to ignore the duration of initialisation
-            # start_time = time.time()
             start_time = time.perf_counter()
-            start_time2 = time.time()
             counter = 0
         counter += len(data[0])
-        if counter >= requiered_samples:
+        if counter >= required_samples:
             break
 
-    # duration = time.time()-start_time
     duration = time.perf_counter() - start_time
-    duration2 = time.time() - start_time2
-    print(counter/duration2)
     return counter/duration
 
 

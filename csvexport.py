@@ -22,6 +22,8 @@ def main(csv_file_path: str,
          calibrate_output_file_path: Optional[str]=None,
          calibration_file_path: Optional[str]=None,
          zero_offset_shift_compensation_channel: Optional[int]=None,
+         zero_offset_shift_compensation_function_file_path: Optional[str]=None,
+         zero_offset_shift_compensation_function_time_offset_sec: int=0,
          raw_or_volt: str="volt",
          sampling_rate: int=440,
          do_sampling_rate_measure: bool=True) -> None:
@@ -33,9 +35,13 @@ def main(csv_file_path: str,
     assert all(1 <= c <= 8 for c in selected_channels)
     selected_channels = [i-1 for i in selected_channels]
 
+    assert zero_offset_shift_compensation_channel is None or zero_offset_shift_compensation_function_file_path is None
+
     assert zero_offset_shift_compensation_channel is None or 1 <= zero_offset_shift_compensation_channel <= 8
     if zero_offset_shift_compensation_channel is not None:
         zero_offset_shift_compensation_channel -= 1
+
+    assert zero_offset_shift_compensation_function_time_offset_sec >= 0
 
     assert vertical_scale_factor is None or isinstance(vertical_scale_factor, List)
     if vertical_scale_factor is None:
@@ -56,17 +62,18 @@ def main(csv_file_path: str,
     correction_data: CorrectionDataType = [{} for _ in range(8)]  # list of dicts of dicts
     # usecase: correction_data[channel_id][vscale][units] = correction_factor
 
+    zero_offset_shift_compensation_function = None
+    if zero_offset_shift_compensation_function_file_path:
+        somedict = {}
+        with check_and_open_file(zero_offset_shift_compensation_function_file_path) as f:
+            exec(f.read(), somedict)
+        zero_offset_shift_compensation_function = somedict["calc_zos"]
+        assert callable(zero_offset_shift_compensation_function)
+
     if calibration_file_path:
-        if not os.path.exists(calibration_file_path):
-            log.error(f"There is no file '{calibration_file_path}'.")
-            sys.exit(1)
-        if os.path.isdir(calibration_file_path):
-            log.error(f"'{calibration_file_path}' is a directory.")
-            sys.exit(1)
-        with open(calibration_file_path) as f:
+        with check_and_open_file(calibration_file_path) as f:
             import json
             calibration_data = json.load(f)
-        # print(calibration_data)
 
         log.info(f"Using calibration data from file '{calibration_file_path}' to correct measured values")
 
@@ -96,7 +103,10 @@ def main(csv_file_path: str,
     device = Hantek1008(ns_per_div=1_000_000,
                         vertical_scale_factor=vertical_scale_factor,
                         correction_data=correction_data,
-                        zero_offset_shift_compensation_channel=zero_offset_shift_compensation_channel)
+                        zero_offset_shift_compensation_channel=zero_offset_shift_compensation_channel,
+                        zero_offset_shift_compensation_function=zero_offset_shift_compensation_function,
+                        zero_offset_shift_compensation_function_time_offset_sec=zero_offset_shift_compensation_function_time_offset_sec
+                        )
 
     try:
         log.info("Connecting...")
@@ -272,6 +282,16 @@ def calibration_routine(device: Hantek1008, calibrate_file_path: str):
         calibration_file.write(json.dumps(calibration_data))
 
 
+def check_and_open_file(file_path: str):
+    if not os.path.exists(file_path):
+        log.error(f"There is no file '{file_path}'.")
+        sys.exit(1)
+    if os.path.isdir(file_path):
+        log.error(f"'{file_path}' is a directory.")
+        sys.exit(1)
+    return open(file_path)
+
+
 if __name__ == "__main__":
 
     description = f"""\
@@ -321,12 +341,21 @@ Collect data from device 'Hantek 1008'. Usage examples:
                         type=str, default="volt", const="raw", nargs='?', choices=["raw", "volt", "volt+raw"],
                         help="Specifies whether the sample values return from the device should be transformed"
                              " to volts (eventually using calibration data) or not. If flag is not set, it defaults"
-                             "to'volt'. If flag is set without a parameter 'raw' is used")
+                             " to 'volt'. If flag is set without a parameter 'raw' is used")
     parser.add_argument('-z', '--zoscompensation', dest="zos_compensation", metavar='channel',
-                        type=channel_type, default=None, const=8, nargs='?',
-                        help='Compensate the zero offset shift that obscures over longer timescales. Needs at least'
-                             ' one unused channel, make sure that no voltage is applied to the given channel. '
-                             'Defaults to no compensation, if used without an argument channel 8 is used')
+                        type=str, default=None, nargs='*',
+                        help=
+                        """Compensate the zero offset shift that obscures over longer timescales.
+                        There are two possible ways of compensating that:
+                        (A) Compute shift out of an unused channels: Needs at least one unused channel, make sure
+                         that no voltage is applied to the given channel. 
+                        (B)
+                        Defaults to no compensation, if used without an argument method A is used on channel 8.
+                        If one integer argument is given method A is used on that channel. Otherwise Method B is used.
+                        It awaits a path to a file with a python function 
+                        (calc_zos(ch: int, vscale: float, dtime: float)->float) in it 
+                        and as a second argument a time offset (how long the device is already running in sec).
+                        """)
     parser.add_argument('-f', '--samplingrate', dest='sampling_rate',
                         type=int, default=440, choices=Hantek1008.valid_roll_sampling_rates(),
                         help='Set the sampling rate (in Hz) the device should use (default:440)')
@@ -343,19 +372,31 @@ Collect data from device 'Hantek 1008'. Usage examples:
         if not ok:
             parser.error(fail_message)
 
+
     arg_assert(len(args.vscale) == 1 or len(args.vscale) == len(args.channels),
                "There must be one vscale factor or as many as selected channels")
     arg_assert(len(set(args.channels)) == len(args.channels),
                "Selected channels list is not a set (multiple occurrences of the same channel id")
-    arg_assert(args.calibration_file_path is None or not args.raw_or_volt.contains("volt"),
-               "--calibrationfile can not be used together with the '--raw volt' flag")
-    arg_assert(args.zos_compensation is None or not args.raw_or_volt.contains("volt"),
-               "--zoscompensation can not be used together with the '--raw volt' flag")
-    arg_assert(args.zos_compensation is None or len(args.channels) < 8,
-               "Zero-offset-shift-compensation is only possible if there is at least one unused channel")
-    arg_assert(args.zos_compensation is None or args.zos_compensation not in args.channels,
-               f"The channel {args.zos_compensation} is used for Zero-offset-shift-compensation,"
-               f" but it is also a selected channel")
+    # arg_assert(args.calibration_file_path is None or not args.raw_or_volt.contains("volt"),
+    #            "--calibrationfile can not be used together with the '--raw volt' flag")
+    # arg_assert(args.zos_compensation is None or not args.raw_or_volt.contains("volt"),
+    #            "--zoscompensation can not be used together with the '--raw volt' flag")
+
+    if args.zos_compensation is not None:
+        arg_assert(len(args.zos_compensation) <=2, "'--zoscompensation' only awaits 0, 1 or 2 parameters")
+        if len(args.zos_compensation) == 0:
+            # defaults to channel 8
+            args.zos_compensation = [8]
+        if len(args.zos_compensation) == 1:  # if compensation via unused channel is used
+            args.zos_compensation[0] = channel_type(args.zos_compensation[0])
+            arg_assert(len(args.channels) < 8,
+                       "Zero-offset-shift-compensation is only possible if there is at least one unused channel")
+            arg_assert(args.zos_compensation[0] not in args.channels,
+                       f"The channel {args.zos_compensation[0]} is used for Zero-offset-shift-compensation,"
+                       f" but it is also a selected channel")
+        if len(args.zos_compensation) == 2:  # if compensation via function is used
+            arg_assert(args.zos_compensation[1].isdigit(), "The second argument must be an int")
+            args.zos_compensation[1] = int(args.zos_compensation[1])
 
     log.basicConfig(level=args.log_level, format='%(levelname)-7s: %(message)s')
 
@@ -365,6 +406,8 @@ Collect data from device 'Hantek 1008'. Usage examples:
          calibrate_output_file_path=args.calibrate,
          calibration_file_path=args.calibration_file_path,
          raw_or_volt=args.raw_or_volt,
-         zero_offset_shift_compensation_channel=args.zos_compensation,
+         zero_offset_shift_compensation_channel=args.zos_compensation[0] if len(args.zos_compensation) == 1 else None,
+         zero_offset_shift_compensation_function_file_path=args.zos_compensation[0] if len(args.zos_compensation) == 2 else None,
+         zero_offset_shift_compensation_function_time_offset_sec=args.zos_compensation[1] if len(args.zos_compensation) == 2 else 0,
          sampling_rate=args.sampling_rate,
          do_sampling_rate_measure=args.do_sampling_rate_measure)

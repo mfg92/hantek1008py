@@ -51,7 +51,8 @@ class Hantek1008:
                  vertical_scale_factor: Union[float, List[float]] = 1.0,
                  correction_data: Optional[CorrectionDataType] = None,
                  zero_offset_shift_compensation_channel: Optional[int] = None,
-                 zero_offset_shift_compensation_function: Optional[ZeroOffsetShiftCompensationFunctionType] = None):
+                 zero_offset_shift_compensation_function: Optional[ZeroOffsetShiftCompensationFunctionType] = None,
+                 zero_offset_shift_compensation_function_time_offset_sec: Optional[int] = 0):
         """
         :param ns_per_div: 
         :param vertical_scale_factor: must be an array of length 8 with a float scale value for each channel. 
@@ -82,7 +83,7 @@ class Hantek1008:
 
         self.__zero_offset_shift_compensation_function: ZeroOffsetShiftCompensationFunctionType \
             = zero_offset_shift_compensation_function
-        self.__start_monotonic_time = time.monotonic()
+        self.__start_monotonic_time = time.monotonic() - zero_offset_shift_compensation_function_time_offset_sec
 
         # dict of list of shorts, outer dict is of size 3 and contains values
         # for every vertical scale factor, inner list contains an zero offset per channel

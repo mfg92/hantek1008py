@@ -104,7 +104,8 @@ def main(csv_file_path: str,
                         correction_data=correction_data,
                         zero_offset_shift_compensation_channel=zero_offset_shift_compensation_channel,
                         zero_offset_shift_compensation_function=zero_offset_shift_compensation_function,
-                        zero_offset_shift_compensation_function_time_offset_sec=zero_offset_shift_compensation_function_time_offset_sec
+                        zero_offset_shift_compensation_function_time_offset_sec
+                        =zero_offset_shift_compensation_function_time_offset_sec
                         )
 
     try:
@@ -195,7 +196,8 @@ def main(csv_file_path: str,
         log.info("Sample collection was canceled by user")
         pass
 
-    csv_file.close()
+    if csv_file:
+        csv_file.close()
     log.info("Exporting data finished")
 
     device.close()
@@ -204,6 +206,7 @@ def main(csv_file_path: str,
 def measure_sampling_rate(device: Hantek1008, used_sampling_rate: int, measurment_duration: float) -> float:
     required_samples = int(measurment_duration * used_sampling_rate)
     counter = -1
+    start_time = 0
     for data in device.request_samples_roll_mode():
         if counter == -1:  # skip first samples to ignore the duration of initialisation
             start_time = time.perf_counter()
@@ -382,7 +385,7 @@ Collect data from device 'Hantek 1008'. Usage examples:
     #            "--zoscompensation can not be used together with the '--raw volt' flag")
 
     if args.zos_compensation is not None:
-        arg_assert(len(args.zos_compensation) <=2, "'--zoscompensation' only awaits 0, 1 or 2 parameters")
+        arg_assert(len(args.zos_compensation) <= 2, "'--zoscompensation' only awaits 0, 1 or 2 parameters")
         if len(args.zos_compensation) == 0:
             # defaults to channel 8
             args.zos_compensation = [8]
@@ -405,8 +408,17 @@ Collect data from device 'Hantek 1008'. Usage examples:
          calibrate_output_file_path=args.calibrate,
          calibration_file_path=args.calibration_file_path,
          raw_or_volt=args.raw_or_volt,
-         zero_offset_shift_compensation_channel=args.zos_compensation[0] if args.zos_compensation is not None and len(args.zos_compensation) == 1 else None,
-         zero_offset_shift_compensation_function_file_path=args.zos_compensation[0] if args.zos_compensation is not None and len(args.zos_compensation) == 2 else None,
-         zero_offset_shift_compensation_function_time_offset_sec=args.zos_compensation[1] if args.zos_compensation is not None and len(args.zos_compensation) == 2 else 0,
+         zero_offset_shift_compensation_channel=
+         args.zos_compensation[0]
+         if args.zos_compensation is not None and len(args.zos_compensation) == 1
+         else None,
+         zero_offset_shift_compensation_function_file_path=
+         args.zos_compensation[0]
+         if args.zos_compensation is not None and len(args.zos_compensation) == 2
+         else None,
+         zero_offset_shift_compensation_function_time_offset_sec=
+         args.zos_compensation[1]
+         if args.zos_compensation is not None and len(args.zos_compensation) == 2
+         else 0,
          sampling_rate=args.sampling_rate,
          do_sampling_rate_measure=args.do_sampling_rate_measure)

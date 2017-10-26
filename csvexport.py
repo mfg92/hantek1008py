@@ -1,7 +1,6 @@
 #!/bin/python3
 
-from hantek1008 import Hantek1008
-from hantek1008 import CorrectionDataType
+from hantek1008 import Hantek1008, CorrectionDataType
 from typing import Optional, List
 import logging as log
 import argparse
@@ -169,7 +168,7 @@ def main(csv_file_path: str,
         csv_file.write(f"# UNIX-Time: {now.isoformat()}\n")
         csv_file.write(f"# vscale: {', '.join(str(f) for f in vertical_scale_factor)}\n")
         csv_file.write("# calibration data:\n")
-        for vscale, zero_offset in sorted(device.get_calibration_data().items()):
+        for vscale, zero_offset in sorted(device.get_zero_offsets().items()):
             csv_file.write(f"# zero_offset [{vscale:<4}]: {' '.join([str(round(v, 1)) for v in zero_offset])}\n")
 
         if roll_mode:
@@ -406,8 +405,8 @@ Collect data from device 'Hantek 1008'. Usage examples:
          calibrate_output_file_path=args.calibrate,
          calibration_file_path=args.calibration_file_path,
          raw_or_volt=args.raw_or_volt,
-         zero_offset_shift_compensation_channel=args.zos_compensation[0] if len(args.zos_compensation) == 1 else None,
-         zero_offset_shift_compensation_function_file_path=args.zos_compensation[0] if len(args.zos_compensation) == 2 else None,
-         zero_offset_shift_compensation_function_time_offset_sec=args.zos_compensation[1] if len(args.zos_compensation) == 2 else 0,
+         zero_offset_shift_compensation_channel=args.zos_compensation[0] if args.zos_compensation is not None and len(args.zos_compensation) == 1 else None,
+         zero_offset_shift_compensation_function_file_path=args.zos_compensation[0] if args.zos_compensation is not None and len(args.zos_compensation) == 2 else None,
+         zero_offset_shift_compensation_function_time_offset_sec=args.zos_compensation[1] if args.zos_compensation is not None and len(args.zos_compensation) == 2 else 0,
          sampling_rate=args.sampling_rate,
          do_sampling_rate_measure=args.do_sampling_rate_measure)

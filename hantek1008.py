@@ -2,6 +2,7 @@ import usb.core
 import usb.util
 import usb.backend
 import time
+from time import sleep
 from typing import Union, Optional, List, Dict, Tuple, Callable, Generator
 import logging as log
 import math
@@ -103,18 +104,6 @@ class Hantek1008Raw:
         assert self.__out is not None
         assert self.__in is not None
 
-    def __sleep(self, sleep_time: float = 0.002):
-        """
-        Sleeps sleep_time seconds
-        defaults to: delay between the commands send in windows software (is about 2 ms)
-        """
-        if sleep_time <= 0.0:
-            return
-        time.sleep(sleep_time)
-        # start = time.time()
-        # while time.time() - start < sleep_time: # loop to guarantee delay is at least past
-        #    time.sleep(sleep_time)
-
     def __write_and_receive(self, message: bytes, response_length: int,
                             sec_till_response_request: float = 0.002, sec_till_start: float = 0.002) -> bytes:
         """write and read from the device"""
@@ -123,11 +112,11 @@ class Hantek1008Raw:
         assert isinstance(message, bytes)
         log.debug(f">[{len(message):2}] {to_hex_string(message)}")
 
-        self.__sleep(sec_till_start)
+        sleep(sec_till_start)
 
         self.__out.write(message)
 
-        self.__sleep(sec_till_response_request)
+        sleep(sec_till_response_request)
 
         response = bytes(self.__in.read(response_length))
 
@@ -179,7 +168,7 @@ class Hantek1008Raw:
             assert response[0] in [0, 1, 2, 3]
             if response[0] in [2, 3]:
                 return
-            self.__sleep(0.02)
+            sleep(0.02)
             self.__send_cmd(0xf3)
         raise RuntimeError(f"a55a command failed, all {attempts} attempts were answered with 0 or 1.")
 
@@ -222,7 +211,7 @@ class Hantek1008Raw:
     def _init1(self):
         """Initialize the device like the windows software does it"""
         self.__send_cmd(0xb0)  # 176
-        time.sleep(0.7)  # not sure if needed
+        sleep(0.7)  # not sure if needed
         self.__send_cmd(0xb0)  # 176
         self.__send_cmd(0xf3)  # 243
         self.__send_cmd(0xb9, parameter=to_hex_array("01 b0 04 00 00"))  # 185
@@ -282,7 +271,7 @@ class Hantek1008Raw:
 
             self.__send_cmd(0xc0)
 
-            self.__sleep(0.0124)
+            sleep(0.0124)
             self.__send_cmd(0xc2)
 
             self.__send_a55a_command()
@@ -485,7 +474,7 @@ class Hantek1008Raw:
         log.debug("start pause thread")
         while not self.__cancel_pause_thread:
             self.__send_cmd(0xf3)
-            time.sleep(0.01)
+            sleep(0.01)
         log.debug("stop pause thread")
 
     def pause(self) -> None:

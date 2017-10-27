@@ -438,7 +438,7 @@ class Hantek1008Raw:
     def get_zero_offsets(self) -> Dict[float, List[float]]:
         return copy.deepcopy(self.__zero_offsets)
 
-    def get_zero_offset(self, channel_id: int, vscale: Optional[float]) -> float:
+    def get_zero_offset(self, channel_id: int, vscale: Optional[float] = None) -> float:
         assert channel_id in Hantek1008Raw.valid_channel_ids()
         assert vscale is None or vscale in Hantek1008Raw.valid_vscale_factors()
 
@@ -602,7 +602,7 @@ class Hantek1008(Hantek1008Raw):
         print("zosc-value", self.__zero_offset_shift_compensation_value)
 
     @overrides
-    def get_zero_offset(self, channel_id: int, vscale: Optional[float]) -> float:
+    def get_zero_offset(self, channel_id: int, vscale: Optional[float] = None) -> float:
         if vscale is None:
             vscale = Hantek1008Raw.get_vscale(self, channel_id)
 

@@ -9,7 +9,7 @@ This will write the measured data of channel 1 and 2 to 'mydata.csv' until you p
 
 ### Notes:
 * Requires Python >= 3.6
-* Requires pyusb (install it using pip: `pip3 install pyusb`)
+* Requires *pyusb* and *overrides* (install it using pip: `pip3 install pyusb overrides`)
 * If the software can not access the usb device because of lacking accessright, do the following (tested on linux/fedora):
   1. Create file "/etc/udev/rules.d/99-hantek1008.rules" with content:
      ACTION=="add", SUBSYSTEM=="usb", ATTRS{idVendor}=="0783", ATTR{idProduct}=="5725", MODE="0666"

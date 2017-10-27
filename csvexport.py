@@ -19,6 +19,7 @@ def main(csv_file_path: str,
          vertical_scale_factor: Optional[List[float]]=1.0,
          roll_mode: bool=True,
          calibrate_output_file_path: Optional[str]=None,
+         calibrate_channels_at_once: Optional[int]=None,
          calibration_file_path: Optional[str]=None,
          zero_offset_shift_compensation_channel: Optional[int]=None,
          zero_offset_shift_compensation_function_file_path: Optional[str]=None,
@@ -59,14 +60,14 @@ def main(csv_file_path: str,
                                  for i in range(8)]
 
     correction_data: CorrectionDataType = [{} for _ in range(8)]  # list of dicts of dicts
-    # usecase: correction_data[channel_id][vscale][units] = correction_factor
+    # use case: correction_data[channel_id][vscale][units] = correction_factor
 
     zero_offset_shift_compensation_function = None
     if zero_offset_shift_compensation_function_file_path:
-        somedict = {}
+        globals_dict = {}
         with check_and_open_file(zero_offset_shift_compensation_function_file_path) as f:
-            exec(f.read(), somedict)
-        zero_offset_shift_compensation_function = somedict["calc_zos"]
+            exec(f.read(), globals_dict)
+        zero_offset_shift_compensation_function = globals_dict["calc_zos"]
         assert callable(zero_offset_shift_compensation_function)
 
     if calibration_file_path:
@@ -80,14 +81,19 @@ def main(csv_file_path: str,
             channel_id = int(channel_id)
             if len(channel_cdata) == 0:
                 continue
-            log.info(f"  Channel {channel_id+1}:")
+            log.info(f"Channel {channel_id+1}:")
             for test in channel_cdata:
                 vscale = test["vscale"]
                 test_voltage = test["test_voltage"]
                 units = test["measured_value"] - test["zero_offset"]
                 correction_factor = test_voltage / (units * 0.01 * vscale)
 
-                log.info(f"    {test} -> {correction_factor}")
+                if test_voltage == 0:
+                    continue
+                assert 0.5 < correction_factor < 2.0, "Correction factor seems to be false"
+
+                #log.info(f"    {test} -> {correction_factor}")
+                log.info(f"{test_voltage:>6}V -> {correction_factor:0.5f}")
 
                 if vscale not in correction_data[channel_id]:
                     correction_data[channel_id][vscale] = {}
@@ -129,7 +135,7 @@ def main(csv_file_path: str,
         sys.exit(0)
 
     if calibrate_output_file_path:
-        calibration_routine(device, calibrate_output_file_path)
+        calibration_routine(device, calibrate_output_file_path, calibrate_channels_at_once)
         device.close()
         sys.exit()
 
@@ -193,7 +199,7 @@ def main(csv_file_path: str,
                 csv_writer.writerows(zip(*channel_data3))
                 csv_file.write(f"# UNIX-Time: { datetime.datetime.now().timestamp()}\n")
     except KeyboardInterrupt:
-        log.info("Sample collection was canceled by user")
+        log.info("Sample collection was stopped by user")
         pass
 
     if csv_file:
@@ -219,7 +225,9 @@ def measure_sampling_rate(device: Hantek1008, used_sampling_rate: int, measurmen
     return counter/duration
 
 
-def calibration_routine(device: Hantek1008, calibrate_file_path: str):
+def calibration_routine(device: Hantek1008, calibrate_file_path: str, channels_at_once: int):
+    assert channels_at_once in [1, 2, 4, 8]
+
     print("This interactive routine will generate a calibration that can later be used "
           "to get more precise results. It works by connecting different well known "
           "voltages one after another to a channel. Once all calibration voltages are "
@@ -243,11 +251,13 @@ def calibration_routine(device: Hantek1008, calibrate_file_path: str):
     print(f"Calibration voltages are: {' '.join([ f'{v}V' for v in test_voltages])}")
 
     for channel_id in range(8):
-
         calibration_data[channel_id] = []
 
+    for channel_id in range(0, 8, channels_at_once):
+
         for test_voltage in test_voltages:
-            cmd = input(f"Do {test_voltage}V measurement on channel {channel_id+1} (Enter),"
+            cmd = input(f"Do {test_voltage}V measurement on channel {channel_id+1}"
+                        f"{(' to ' + str(channel_id+channels_at_once)) if channels_at_once>1 else ''} (Enter),"
                         f" skip voltage (s), skip channel (ss) or quit (q): ")
             if cmd == 'q':
                 return
@@ -269,16 +279,17 @@ def calibration_routine(device: Hantek1008, calibrate_file_path: str):
             device.pause()
 
             channel_data = list(zip(*data))
-            cd = channel_data[channel_id]
-            avg = sum(cd) / len(cd)
 
-            calibration_data[channel_id].append({
-                "test_voltage": test_voltage,
-                "measured_value": round(avg, 2),
-                "vscale": device.get_vscales()[channel_id],
-                "zero_offset": round(device.get_zero_offset(channel_id=channel_id), 2)
-            })
-            #    "channel_data": channel_data})
+            for calibrated_channel_id in range(channel_id, channel_id+channels_at_once):
+                cd = channel_data[calibrated_channel_id]
+                avg = sum(cd) / len(cd)
+
+                calibration_data[calibrated_channel_id].append({
+                    "test_voltage": test_voltage,
+                    "measured_value": round(avg, 2),
+                    "vscale": device.get_vscales()[calibrated_channel_id],
+                    "zero_offset": round(device.get_zero_offset(channel_id=calibrated_channel_id), 2)
+                })
 
     with open(calibrate_file_path, 'w') as calibration_file:
         calibration_file.write(json.dumps(calibration_data))
@@ -301,7 +312,7 @@ Collect data from device 'Hantek 1008'. Usage examples:
     * Save data sampled with 22 Hz in file 'my_data.csv':
         {sys.argv[0]} my_data.csv --channels 1 2 --samplingrate 22
     * Create and fill calibration file 'my_cal.json':
-        {sys.argv[0]} --calibrate my_cal.cd.json
+        {sys.argv[0]} --calibrate my_cal.cd.json 1
 """
 
     def channel_type(value):
@@ -321,10 +332,12 @@ Collect data from device 'Hantek 1008'. Usage examples:
                                     " If filename ends with '.xz' the content is compress using lzma/xz."
                                     " This reduces the filesize to ~ 1/12 compered to the uncompressed format."
                                     " Those files can be decompressed using 'xz -dk <filename>")
-    command_group.add_argument('--calibrate', metavar='calibrationfile_path', nargs='?',
+    command_group.add_argument('--calibrate', metavar=('calibrationfile_path', 'channels_at_once'), nargs=2,
                                type=str, default=None,
-                               help='If set calibrates the device and write calibration values to given file.'
-                                    ' Ignores all other args')
+                               help='If set, calibrate the device by measuring given voltages and write'
+                                    ' calibration values to given file.'
+                                    ' Multiple channels (2, 4 or all 8) can get calibrated at the same time'
+                                    ' if supplied with the same voltage. Ignores all other arguments.')
     parser.add_argument('-s', '--channels', metavar='channel', nargs='+',
                         type=channel_type, default=list(range(1, 9)),
                         help="Select channels that are of interest")
@@ -344,7 +357,7 @@ Collect data from device 'Hantek 1008'. Usage examples:
                         help="Specifies whether the sample values return from the device should be transformed"
                              " to volts (eventually using calibration data) or not. If flag is not set, it defaults"
                              " to 'volt'. If flag is set without a parameter 'raw' is used")
-    parser.add_argument('-z', '--zoscompensation', dest="zos_compensation", metavar='channel',
+    parser.add_argument('-z', '--zoscompensation', dest="zos_compensation", metavar='x',
                         type=str, default=None, nargs='*',
                         help=
                         """Compensate the zero offset shift that obscures over longer timescales.
@@ -374,6 +387,11 @@ Collect data from device 'Hantek 1008'. Usage examples:
         if not ok:
             parser.error(fail_message)
 
+
+    if args.calibrate is not None:
+        calibrate_channels_at_once = args.calibrate[1]
+        arg_assert(calibrate_channels_at_once.isdigit() and int(calibrate_channels_at_once) in [1, 2, 4, 8],
+                   "The second argument must be 1, 2, 4 or 8.")
 
     arg_assert(len(args.vscale) == 1 or len(args.vscale) == len(args.channels),
                "There must be one vscale factor or as many as selected channels")
@@ -405,7 +423,8 @@ Collect data from device 'Hantek 1008'. Usage examples:
     main(selected_channels=args.channels,
          vertical_scale_factor=args.vscale,
          csv_file_path=args.csv_path,
-         calibrate_output_file_path=args.calibrate,
+         calibrate_output_file_path=args.calibrate[0] if args.calibrate else None,
+         calibrate_channels_at_once=int(args.calibrate[1]) if args.calibrate else None,
          calibration_file_path=args.calibration_file_path,
          raw_or_volt=args.raw_or_volt,
          zero_offset_shift_compensation_channel=

@@ -42,7 +42,7 @@ class Hantek1008Raw:
 
     __MAX_PACKAGE_SIZE: int = 64
     __VSCALE_FACTORS: List[float] = [0.02, 0.125, 1.0]
-    __roll_mode_sampling_rate_to_id_dic: Dict[int, int] = {440: 0x18, 220: 0x19, 88: 0x1a, 44: 0x1b, 22: 0x1c}
+    __roll_mode_sampling_rate_to_id_dic: Dict[int, int] = {440: 0x18, 220: 0x19, 88: 0x1a, 44: 0x1b, 22: 0x1c, 11: 0x1d}
 
     def __init__(self, ns_per_div: int = 500_000,
                  vertical_scale_factor: Union[float, List[float]] = 1.0):
@@ -185,12 +185,12 @@ class Hantek1008Raw:
         self.__send_cmd(0xa3, parameter=[time_per_div_id])
 
     @staticmethod
-    def __vertical_scale_id_to_factor(vs_id: int):
+    def _vertical_scale_id_to_factor(vs_id: int):
         assert 1 <= vs_id <= len(Hantek1008Raw.__VSCALE_FACTORS)
         return Hantek1008Raw.__VSCALE_FACTORS[vs_id - 1]
 
     @staticmethod
-    def __vertical_scale_factor_to_id(vs_factor: float):
+    def _vertical_scale_factor_to_id(vs_factor: float):
         assert vs_factor in Hantek1008Raw.__VSCALE_FACTORS
         return Hantek1008Raw.__VSCALE_FACTORS.index(vs_factor) + 1
 
@@ -200,7 +200,7 @@ class Hantek1008Raw:
         scale_factor must be an array of length 8 with a float scale value for each channel.
         Or a single float, than all channel will have that scale factor"""
         assert all(x in Hantek1008Raw.__VSCALE_FACTORS for x in scale_factors)
-        scale_factors = [Hantek1008Raw.__vertical_scale_factor_to_id(sf) for sf in scale_factors]
+        scale_factors = [Hantek1008Raw._vertical_scale_factor_to_id(sf) for sf in scale_factors]
         self.__send_cmd(0xa2, parameter=scale_factors, sec_till_response_request=0.2132)
 
     def init(self):
@@ -261,7 +261,7 @@ class Hantek1008Raw:
         """calibrate"""
         self.__zero_offsets = {}
         for vscale_id in range(1, 4):
-            vscale = Hantek1008Raw.__vertical_scale_id_to_factor(vscale_id)
+            vscale = Hantek1008Raw._vertical_scale_id_to_factor(vscale_id)
 
             self.__send_cmd(0xf3)
 
@@ -656,7 +656,8 @@ class Hantek1008(Hantek1008Raw):
 
         scale = 0.01 * vscale
 
-        accuracy = -int(math.log10(scale)) + 2  # amount of digits after the dot that is not nearly random
+        # accuracy = -int(math.log10(scale)) + 2  # amount of digits after the dot that is not nearly random
+        accuracy = [3, 4, 5][Hantek1008Raw._vertical_scale_factor_to_id(vscale) - 1]
         return [round(
             self.__calc_correction_factor(v - zero_offset, channel_id, vscale) * (v - zero_offset) * scale
             , ndigits=accuracy)
@@ -683,7 +684,6 @@ class Hantek1008(Hantek1008Raw):
         if len(channel_cd) == 1:
             return channel_cd[0]
 
-        # noinspection PyTypeChecker
         units_less, cfactor_less = max(((key, value)
                                         for key, value
                                         in channel_cd.items()

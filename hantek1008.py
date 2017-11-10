@@ -626,7 +626,7 @@ class Hantek1008(Hantek1008Raw):
             self.__zero_offset_shift_compensation_value = \
                 (1.0 - adaption_factor) * self.__zero_offset_shift_compensation_value \
                 + adaption_factor * delta
-        print("zosc-value", self.__zero_offset_shift_compensation_value)
+        log.debug("zosc-value", self.__zero_offset_shift_compensation_value)
 
     @overrides
     def get_zero_offset(self, channel_id: int, vscale: Optional[float] = None) -> float:
@@ -672,7 +672,7 @@ class Hantek1008(Hantek1008Raw):
         return [self.__raw_to_volt(channel_data, ch) for ch, channel_data in enumerate(per_channel_lists)]
 
     def __raw_to_volt(self, raw_values: List[int], channel_id: int) -> List[float]:
-        """Convert the raw shorts to usefull volt values"""
+        """Convert the raw shorts to useful volt values"""
         vscale = 1.0
         zero_offset = 2048
 
@@ -693,7 +693,7 @@ class Hantek1008(Hantek1008Raw):
     def __calc_correction_factor(self, delta_to_zero: float, channel_id: int, vscale: float) -> float:
         """
         Compute a correction factor based on the given calibration data.
-        Allways returns 1.0 if no calibration data for the requested channel or at all is available.
+        Always returns 1.0 if no calibration data for the requested channel or at all is available.
         :param delta_to_zero:
         :param channel_id:
         :param vscale:
@@ -726,7 +726,6 @@ class Hantek1008(Hantek1008Raw):
             return cfactor_greater
 
         alpha = (delta_to_zero - units_less) / (units_greater - units_less)
-        # log.info((1.0 - alpha) * cfactor_less + alpha * cfactor_greater)
         return (1.0 - alpha) * cfactor_less + alpha * cfactor_greater
 
     @overrides

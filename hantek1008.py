@@ -42,7 +42,11 @@ class Hantek1008Raw:
 
     __MAX_PACKAGE_SIZE: int = 64
     __VSCALE_FACTORS: List[float] = [0.02, 0.125, 1.0]
-    __roll_mode_sampling_rate_to_id_dic: Dict[int, int] = {440: 0x18, 220: 0x19, 88: 0x1a, 44: 0x1b, 22: 0x1c, 11: 0x1d}
+    __roll_mode_sampling_rate_to_id_dic: Dict[float, int] = \
+        {440: 0x18, 220: 0x19, 88: 0x1a, 44: 0x1b,
+         22: 0x1c, 11: 0x1d, 5: 0x1e, 2: 0x1f,
+         1: 0x20, 0.5: 0x21, 0.25: 0x22, 0.125: 0x23,
+         1.0/16: 0x24}
 
     def __init__(self, ns_per_div: int = 500_000,
                  vertical_scale_factor: Union[float, List[float]] = 1.0):

@@ -25,7 +25,7 @@ def main(csv_file_path: str,
          zero_offset_shift_compensation_function_file_path: Optional[str]=None,
          zero_offset_shift_compensation_function_time_offset_sec: int=0,
          raw_or_volt: str="volt",
-         sampling_rate: int=440,
+         sampling_rate: float=440,
          do_sampling_rate_measure: bool=True) -> None:
 
     if selected_channels is None or len(selected_channels) == 0:
@@ -372,7 +372,7 @@ Collect data from device 'Hantek 1008'. Usage examples:
                         and as a second argument a time offset (how long the device is already running in sec).
                         """)
     parser.add_argument('-f', '--samplingrate', dest='sampling_rate',
-                        type=int, default=440, choices=Hantek1008.valid_roll_sampling_rates(),
+                        type=float, default=440, choices=Hantek1008.valid_roll_sampling_rates(),
                         help='Set the sampling rate (in Hz) the device should use (default:440)')
     parser.add_argument('-m', '--measuresamplingrate', dest='do_sampling_rate_measure', action="store_const",
                         default=False, const=True,

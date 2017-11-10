@@ -10,6 +10,7 @@ import os
 import lzma
 import sys
 import csv
+import math
 
 assert sys.version_info >= (3, 6)
 

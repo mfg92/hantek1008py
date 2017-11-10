@@ -210,10 +210,10 @@ def main(csv_file_path: str,
 
 
 def measure_sampling_rate(device: Hantek1008, used_sampling_rate: int, measurment_duration: float) -> float:
-    required_samples = int(measurment_duration * used_sampling_rate)
+    required_samples = max(4, int(math.ceil(measurment_duration * used_sampling_rate)))
     counter = -1
     start_time = 0
-    for data in device.request_samples_roll_mode():
+    for data in device.request_samples_roll_mode(sampling_rate=used_sampling_rate):
         if counter == -1:  # skip first samples to ignore the duration of initialisation
             start_time = time.perf_counter()
             counter = 0

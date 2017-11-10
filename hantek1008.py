@@ -218,9 +218,13 @@ class Hantek1008Raw:
         sleep(0.7)  # not sure if needed
         self.__send_cmd(0xb0)  # 176
         self.__send_cmd(0xf3)  # 243
-        self.__send_cmd(0xb9, parameter=to_hex_array("01 b0 04 00 00"))  # 185
-        self.__send_cmd(0xb7, parameter=to_hex_array("00"))  # 183
-        self.__send_cmd(0xbb, parameter=to_hex_array("08 00"))  # 187
+
+
+        #self.__send_cmd(0xb9, parameter=to_hex_array("01 b0 04 00 00"))  # 185
+        #self.__send_cmd(0xb7, parameter=to_hex_array("00"))  # 183
+        #self.__send_cmd(0xbb, parameter=to_hex_array("08 00"))  # 187
+        self.set_generator_speed(300_000)
+        self.set_generator_on(False)
 
         response = self.__send_cmd(0xb5, response_length=64, echo_expected=False,
                                    sec_till_response_request=0.0193)  # 181
@@ -451,25 +455,44 @@ class Hantek1008Raw:
 
         return self.__zero_offsets[vscale][channel_id]
 
+    @staticmethod
+    def get_generator_waveform_max_length() -> int:
+        return 1440
+
     def set_generator_on(self, turn_on: bool) -> None:
         # TODO not tested
-        if turn_on:
-            self.__send_cmd(0xb9, parameter=to_hex_array("01b0040000"))
-
         self.__send_cmd(0xb7, parameter=[0x00])
 
         self.__send_cmd(0xbb, parameter=[0x08, 0x01 if turn_on else 0x00])
+
+    def set_generator_speed(self, speed_in_rpm):
+        # TODO speed_in_rpm must be round to valid values, dont know how
+        def compute_pulse_length(speed_in_rpm: int, bits_per_wave: int = 8) -> int:
+            assert 1 <= speed_in_rpm <= 750_000
+            assert 1 <= bits_per_wave <= Hantek1008Raw.get_generator_waveform_max_length()
+            # TODO values great then 750_000 are possible too, but then the decoding changes (firt paramter gets a 02)
+            # and this other decoding is not completely understood
+            return int(((8 * 360_000_000) / bits_per_wave) / speed_in_rpm)
+
+        assert compute_pulse_length(300_000) == 1200
+        # if turn_on:
+        pulse_length = compute_pulse_length(speed_in_rpm)
+
+        parameter = bytes.fromhex("01") + pulse_length.to_bytes(length=4, byteorder='little', signed=False)
+        assert len(parameter) == 1 + 4
+        self.__send_cmd(0xb9, parameter=parameter)
 
     def set_generator_waveform(self, waveform: List[int]) -> None:
         # TODO not tested
         # example for waveform: F0 0F F0 0F
         # -> switches the output of every channel at every pulse
         # ch1 to ch4 start with down, ch5 to ch8 start up
-        assert len(waveform) <= 0xFFFF
+        assert len(waveform) <= Hantek1008Raw.get_generator_waveform_max_length()
         assert len(waveform) <= 62, "Currently not supported"
-        assert all(b <= 0xFF for b in waveform)
+        assert all(b <= 0b1111_1111 for b in waveform)
 
-        self.__send_cmd(0xb7, parameter=[len(waveform) % 256, len(waveform) >> 8])
+        # send the length of the waveform in bytes
+        self.__send_cmd(0xb7, parameter=int.to_bytes(len(waveform), length=2, byteorder="little", signed=False))
 
         zeros = [0] * (62 - len(waveform))
         self.__send_cmd(0xbf, parameter=[0x01] + waveform + zeros)

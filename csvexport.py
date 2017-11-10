@@ -174,7 +174,7 @@ def main(csv_file_path: str,
         csv_file.write(f"# UNIX-Time: {now.timestamp()}\n")
         csv_file.write(f"# UNIX-Time: {now.isoformat()}\n")
         csv_file.write(f"# vscale: {', '.join(str(f) for f in vertical_scale_factor)}\n")
-        csv_file.write("# calibration data:\n")
+        csv_file.write("# zero offset data:\n")
         for vscale, zero_offset in sorted(device.get_zero_offsets().items()):
             csv_file.write(f"# zero_offset [{vscale:<4}]: {' '.join([str(round(v, 1)) for v in zero_offset])}\n")
 

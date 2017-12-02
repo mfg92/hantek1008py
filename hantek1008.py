@@ -157,7 +157,7 @@ class Hantek1008Raw:
         """
         assert parameter in [2, 3]
         response = self.__send_cmd(0xc6, parameter=[parameter], response_length=2, echo_expected=False)
-        sample_length = int(response.hex(), 16)
+        sample_length = int.from_bytes(response, byteorder="big", signed=False)
         sample_packages_count = int(math.ceil(sample_length / self.__MAX_PACKAGE_SIZE))
         # print("sample_length: {} -> {} packages".format(sample_length, sample_packages_count))
         samples = b''
@@ -422,7 +422,8 @@ class Hantek1008Raw:
                     self.__send_cmd(0xf3)
 
                     response = self.__send_cmd(0xc7, response_length=2, echo_expected=False)
-                    ready_data_length = response[0] * 256 + response[1]
+                    # ready_data_length = response[0] * 256 + response[1]
+                    ready_data_length = int.from_bytes(ready_data_length, byteorder="big", signed=False)
                     assert ready_data_length % 9 == 0
 
                 sample_response = b''

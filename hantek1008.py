@@ -79,8 +79,8 @@ class Hantek1008Raw:
         self.__cancel_pause_thread = False
 
     def connect(self):
-        """Looks for a plugged hantek 1008c device and set ups the connection to it"""
-        # find our device
+        """Find a plugged hantek 1008c device and set up the connection to it"""
+
         self._dev = usb.core.find(idVendor=0x0783, idProduct=0x5725)
 
         # was it found?
@@ -476,14 +476,19 @@ class Hantek1008Raw:
             return int(((8 * 360_000_000) / bits_per_wave) / speed_in_rpm)
 
         assert compute_pulse_length(300_000) == 1200
-        # if turn_on:
-        pulse_length = compute_pulse_length(speed_in_rpm)
 
+        pulse_length = compute_pulse_length(speed_in_rpm)
         parameter = bytes.fromhex("01") + pulse_length.to_bytes(length=4, byteorder='little', signed=False)
         assert len(parameter) == 1 + 4
         self.__send_cmd(0xb9, parameter=parameter)
 
     def set_generator_waveform(self, waveform: List[int]) -> None:
+        """
+        Every Byte in the waveform list contains information vor every of the 8 digital ouputs to be on or of.
+        The bit number i in one of those bytes tells if output i should be on or off in that part of the wave.
+        :param waveform:
+        :return:
+        """
         # TODO not tested
         # example for waveform: F0 0F F0 0F
         # -> switches the output of every channel at every pulse

@@ -431,7 +431,7 @@ class Hantek1008Raw:
 
                     response = self.__send_cmd(0xc7, response_length=2, echo_expected=False)
                     # ready_data_length = response[0] * 256 + response[1]
-                    ready_data_length = int.from_bytes(ready_data_length, byteorder="big", signed=False)
+                    ready_data_length = int.from_bytes(response, byteorder="big", signed=False)
                     assert ready_data_length % 9 == 0
 
                 sample_response = b''

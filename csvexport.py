@@ -1,4 +1,4 @@
-#!/bin/python3
+#!/usr/bin/env python3
 
 from hantek1008 import Hantek1008, CorrectionDataType
 from typing import Optional, List

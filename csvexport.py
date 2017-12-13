@@ -190,7 +190,7 @@ def main(csv_file_path: str,
                 csv_file.write(f"# UNIX-Time: {datetime.datetime.now().timestamp()}\n")
         else:
             while True:
-                channel_data2, channel_data3 = device.request_samples_normal_mode()
+                channel_data2, channel_data3 = device.request_samples_burst_mode()
 
                 print(len(channel_data2[0]), len(channel_data3[0]))
                 # channel_data = [cd2 + cd3 for cd2, cd3 in zip(channel_data2, channel_data3)]

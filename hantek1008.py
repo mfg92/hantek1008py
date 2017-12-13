@@ -43,7 +43,7 @@ class Hantek1008Raw:
     """
     This class communicates to a Hantek1008 device via USB.
     It supports configuring the device (set vertical scale, sampling frequency, waveform generator,..)
-    and measure samples with it. Either in continuous (rolling) mode or in windows (normal) mode.
+    and measure samples with it. Either in continuous (rolling) mode or in windows (normal/burst) mode.
     """
     # channel_id/channel_index are zero based
     # channel names are one based
@@ -353,7 +353,7 @@ class Hantek1008Raw:
         response = self.__send_cmd(0xe9, echo_expected=False, response_length=2)
         assert response == to_hex_array("0109")
 
-    def request_samples_normal_mode(self) -> Tuple[List[List[int]], List[List[int]]]:
+    def request_samples_burst_mode(self) -> Tuple[List[List[int]], List[List[int]]]:
         """get the data"""
 
         self.__send_cmd(0xf3)
@@ -743,11 +743,11 @@ class Hantek1008(Hantek1008Raw):
         return (1.0 - alpha) * cfactor_less + alpha * cfactor_greater
 
     @overrides
-    def request_samples_normal_mode(self, mode: str = "volt") -> Tuple[List[List[float]], List[List[float]]]:
+    def request_samples_burst_mode(self, mode: str = "volt") -> Tuple[List[List[float]], List[List[float]]]:
         assert mode in ["raw", "volt", "volt+raw"]
         assert self.__zero_offset_shift_compensation_channel is None, \
-            "zero offset shift compensation is not implemented for normal mode"
-        per_channel_data2, per_channel_data3 = Hantek1008Raw.request_samples_normal_mode(self)
+            "zero offset shift compensation is not implemented for burst mode"
+        per_channel_data2, per_channel_data3 = Hantek1008Raw.request_samples_burst_mode(self)
 
         if mode == "raw":
             return per_channel_data2, per_channel_data3

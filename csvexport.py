@@ -337,7 +337,7 @@ Collect data from device 'Hantek 1008'. Usage examples:
                                type=str, default=None,
                                help='If set, calibrate the device by measuring given voltages and write'
                                     ' calibration values to given file.'
-                                    ' Multiple channels (2, 4 or all 8) can get calibrated at the same time'
+                                    ' Multiple channels (1, 2, 4 or all 8) can get calibrated at the same time'
                                     ' if supplied with the same voltage. Ignores all other arguments.')
     parser.add_argument('-s', '--channels', metavar='channel', nargs='+',
                         type=channel_type, default=list(range(1, 9)),
@@ -365,8 +365,9 @@ Collect data from device 'Hantek 1008'. Usage examples:
                         There are two possible ways of compensating that:
                         (A) Compute shift out of an unused channels: Needs at least one unused channel, make sure
                          that no voltage is applied to the given channel. 
-                        (B)
-                        Defaults to no compensation, if used without an argument method A is used on channel 8.
+                        (B) Compute shift with the help of a given function. Such a function computes a correction-factor
+                         based on the time past since start.
+                        Defaults to no compensation. If used without an argument method A is used on channel 8.
                         If one integer argument is given method A is used on that channel. Otherwise Method B is used.
                         It awaits a path to a file with a python function 
                         (calc_zos(ch: int, vscale: float, dtime: float)->float) in it 

@@ -31,14 +31,6 @@ assert sys.version_info >= (3, 6)
 """
 
 
-def to_hex_array(hex_string: str) -> bytes:
-    return bytes.fromhex(hex_string)
-
-
-def to_hex_string(hex_array: bytes) -> str:
-    return bytes.hex(hex_array)
-
-
 class Hantek1008Raw:
     """
     This class communicates to a Hantek1008 device via USB.
@@ -122,7 +114,7 @@ class Hantek1008Raw:
         start_time = time.time()
 
         assert isinstance(message, bytes)
-        log.debug(f">[{len(message):2}] {to_hex_string(message)}")
+        log.debug(f">[{len(message):2}] {bytes.hex(message)}")
 
         sleep(sec_till_start)
 
@@ -132,7 +124,7 @@ class Hantek1008Raw:
 
         response = bytes(self.__in.read(response_length))
 
-        log.debug(f"<[{len(response):2}] {to_hex_string(response)}")
+        log.debug(f"<[{len(response):2}] {bytes.hex(response)}")
         log.debug(f"delta: {time.time()-start_time:02.4f} sec")
         assert len(response) == response_length
 
@@ -143,7 +135,7 @@ class Hantek1008Raw:
                    sec_till_response_request: float = 0, sec_till_start: float = 0.002) -> bytes:
         """sends a command to the device and checks if the device echos the command id"""
         if isinstance(parameter, str):
-            parameter = to_hex_array(parameter)
+            parameter = bytes.fromhex(parameter)
         elif isinstance(parameter, list):
             parameter = bytes(parameter)
         assert isinstance(parameter, bytes)
@@ -228,50 +220,50 @@ class Hantek1008Raw:
         self.__send_cmd(0xf3)  # 243
 
 
-        #self.__send_cmd(0xb9, parameter=to_hex_array("01 b0 04 00 00"))  # 185
-        #self.__send_cmd(0xb7, parameter=to_hex_array("00"))  # 183
-        #self.__send_cmd(0xbb, parameter=to_hex_array("08 00"))  # 187
+        #self.__send_cmd(0xb9, parameter=bytes.fromhex("01 b0 04 00 00"))  # 185
+        #self.__send_cmd(0xb7, parameter=bytes.fromhex("00"))  # 183
+        #self.__send_cmd(0xbb, parameter=bytes.fromhex("08 00"))  # 187
         self.set_generator_speed(300_000)
         self.set_generator_on(False)
 
         response = self.__send_cmd(0xb5, response_length=64, echo_expected=False,
                                    sec_till_response_request=0.0193)  # 181
-        assert response == to_hex_array("00080008000800080008000800080008d407c907ef07cd07df07eb07c707d707"
+        assert response == bytes.fromhex("00080008000800080008000800080008d407c907ef07cd07df07eb07c707d707"
                                         "e107d207f007d807e607ed07d507e207f607e007f007e907f007ef07ea07f207")
 
         response = self.__send_cmd(0xb6, response_length=64, echo_expected=False)  # 182
-        assert response == to_hex_array("04040404040404040404040404040404d200d500d800d400d400d500d200d200"
+        assert response == bytes.fromhex("04040404040404040404040404040404d200d500d800d400d400d500d200d200"
                                         "9c009f009f009d009d009d009e009d00fd01fc01fc01fc01fb01fa01fd01fc01")
 
         response = self.__send_cmd(0xe5, response_length=2, echo_expected=False)
-        assert response == to_hex_array("d6 06")
+        assert response == bytes.fromhex("d6 06")
 
         response = self.__send_cmd(0xf7, response_length=64, echo_expected=False)
-        assert response == to_hex_array("2cfd8ffb54fa2ef878007a007b00780079007a0079007800b801bf01c301ba01"
+        assert response == bytes.fromhex("2cfd8ffb54fa2ef878007a007b00780079007a0079007800b801bf01c301ba01"
                                         "bb01be01b701b801f90203030803fb02fc020003f502f80294ff92ff8fff93ff")
 
         response = self.__send_cmd(0xf8, response_length=64, echo_expected=False)
-        assert response == to_hex_array("92ff91ff96ff94ffc9fec4febdfec8fec7fec2fecffec9fe4cfe45fe3afe4afe"
+        assert response == bytes.fromhex("92ff91ff96ff94ffc9fec4febdfec8fec7fec2fecffec9fe4cfe45fe3afe4afe"
                                         "48fe42fe54fe4dfe70ff70ff71ff70ff71ff71ff72ff71ff7efe7bfe7afe7efe")
 
         response = self.__send_cmd(0xfa, response_length=56, echo_expected=False)
-        assert response == to_hex_array("7dfe7efe80fe7ffe90019401930192018f01900191018f0195029b0299029802"
+        assert response == bytes.fromhex("7dfe7efe80fe7ffe90019401930192018f01900191018f0195029b0299029802"
                                         "930294029702940290fd89fd84fd90fd8dfd8cfd94fd91fd")
 
         self.__send_cmd(0xf5, sec_till_response_request=0.2132)
 
-        self.__send_cmd(0xa0, parameter=to_hex_array("08"))
+        self.__send_cmd(0xa0, parameter=bytes.fromhex("08"))
 
-        self.__send_cmd(0xaa, parameter=to_hex_array("0101010101010101"))
+        self.__send_cmd(0xaa, parameter=bytes.fromhex("0101010101010101"))
 
         self.__send_set_time_div(500 * 1000)  # 500us, the default value in the windows software
 
-        self.__send_cmd(0xc1, parameter=to_hex_array("0000"))
+        self.__send_cmd(0xc1, parameter=bytes.fromhex("0000"))
 
-        response = self.__send_cmd(0xa7, parameter=to_hex_array("0000"), response_length=1)
-        assert response == to_hex_array("00")
+        response = self.__send_cmd(0xa7, parameter=bytes.fromhex("0000"), response_length=1)
+        assert response == bytes.fromhex("00")
 
-        self.__send_cmd(0xac, parameter=to_hex_array("01f40009c50009c5"))
+        self.__send_cmd(0xac, parameter=bytes.fromhex("01f40009c50009c5"))
 
     def _init2(self):
         """calibrate"""
@@ -304,29 +296,29 @@ class Hantek1008Raw:
         self.__send_cmd(0xf6, sec_till_response_request=0.2132)
 
         response = self.__send_cmd(0xe5, echo_expected=False, response_length=2)
-        assert response == to_hex_array("d606")
+        assert response == bytes.fromhex("d606")
 
         response = self.__send_cmd(0xf7, echo_expected=False, response_length=64)
-        assert response == to_hex_array("2cfd8ffb54fa2ef878007a007b00780079007a0079007800b801bf01c301ba01"
+        assert response == bytes.fromhex("2cfd8ffb54fa2ef878007a007b00780079007a0079007800b801bf01c301ba01"
                                         "bb01be01b701b801f90203030803fb02fc020003f502f80294ff92ff8fff93ff")
 
         response = self.__send_cmd(0xf8, echo_expected=False, response_length=64)
-        assert response == to_hex_array("92ff91ff96ff94ffc9fec4febdfec8fec7fec2fecffec9fe4cfe45fe3afe4afe"
+        assert response == bytes.fromhex("92ff91ff96ff94ffc9fec4febdfec8fec7fec2fecffec9fe4cfe45fe3afe4afe"
                                         "48fe42fe54fe4dfe70ff70ff71ff70ff71ff71ff72ff71ff7efe7bfe7afe7efe")
 
         response = self.__send_cmd(0xfa, echo_expected=False, response_length=56)
-        assert response == to_hex_array("7dfe7efe80fe7ffe90019401930192018f01900191018f0195029b0299029802"
+        assert response == bytes.fromhex("7dfe7efe80fe7ffe90019401930192018f01900191018f0195029b0299029802"
                                         "930294029702940290fd89fd84fd90fd8dfd8cfd94fd91fd")
 
         # self.send_cmd(0xa3, parameter=[0x10])
         self.__send_set_time_div(self.__ns_per_div)
 
-        self.__send_cmd(0xac, parameter=to_hex_array("00c80002bd0002bd"))
+        self.__send_cmd(0xac, parameter=bytes.fromhex("00c80002bd0002bd"))
 
         self.__send_cmd(0xe4, parameter=[0x01])
 
         self.__send_cmd(0xe6, parameter=[0x01], echo_expected=False, response_length=10)
-        # assert response == to_hex_array("eb06e606e606e706e706")
+        # assert response == bytes.fromhex("eb06e606e606e706e706")
 
         self.__send_cmd(0xf3)
 
@@ -334,7 +326,7 @@ class Hantek1008Raw:
 
         self.__send_cmd(0xaa, parameter=[0x01] * 8)
 
-        # self.send_cmd(0xa2, parameter=to_hex_array("0303030303030303"), sec_till_response_request=0.2132)
+        # self.send_cmd(0xa2, parameter=bytes.fromhex("0303030303030303"), sec_till_response_request=0.2132)
         self.__send_set_vertical_scale(self.__vertical_scale_factors)
 
         # self.send_cmd(0xa3, parameter=[0x10])        # some times even 0x10         oder 0x12
@@ -343,15 +335,15 @@ class Hantek1008Raw:
         self.__send_cmd(0xc1, parameter=[0x07, 0x00])  # some times even [0x07, 0x00] oder [0x00, 0x01]
 
         response = self.__send_cmd(0xa7, parameter=[0x00, 0x00], response_length=1)
-        assert response == to_hex_array("00")
+        assert response == bytes.fromhex("00")
 
-        self.__send_cmd(0xac, parameter=to_hex_array("0000000001000579"))
+        self.__send_cmd(0xac, parameter=bytes.fromhex("0000000001000579"))
 
-        self.__send_cmd(0xab, parameter=to_hex_array("080e"))  # some times even 080e oder 0811
+        self.__send_cmd(0xab, parameter=bytes.fromhex("080e"))  # some times even 080e oder 0811
         # oder 080f oder 07fd oder 07e9
 
         response = self.__send_cmd(0xe9, echo_expected=False, response_length=2)
-        assert response == to_hex_array("0109")
+        assert response == bytes.fromhex("0109")
 
     def request_samples_burst_mode(self) -> Tuple[List[List[int]], List[List[int]]]:
         """get the data"""

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
-from hantek1008 import Hantek1008, CorrectionDataType
-from typing import Optional, List
+from hantek1008 import Hantek1008, CorrectionDataType, ZeroOffsetShiftCompensationFunctionType
+from typing import Union, Optional, List, Dict, Tuple, Callable, Generator
 import logging as log
 import argparse
 import time
@@ -11,6 +11,7 @@ import lzma
 import sys
 import csv
 import math
+from usb.core import USBError
 
 assert sys.version_info >= (3, 6)
 
@@ -18,7 +19,6 @@ assert sys.version_info >= (3, 6)
 def main(csv_file_path: str,
          selected_channels: Optional[List[int]]=None,
          vertical_scale_factor: Optional[List[float]]=1.0,
-         roll_mode: bool=True,
          calibrate_output_file_path: Optional[str]=None,
          calibrate_channels_at_once: Optional[int]=None,
          calibration_file_path: Optional[str]=None,
@@ -106,14 +106,53 @@ def main(csv_file_path: str,
         if len(channels_without_cd) > 0:
             log.warning(f"There is no calibration data for channel(s): {channels_without_cd}")
 
-    device = Hantek1008(ns_per_div=1_000_000,
-                        vertical_scale_factor=vertical_scale_factor,
+    device = connect(vertical_scale_factor, correction_data, zero_offset_shift_compensation_channel,
+                     zero_offset_shift_compensation_function, zero_offset_shift_compensation_function_time_offset_sec)
+
+    if calibrate_output_file_path:
+        calibration_routine(device, calibrate_output_file_path, calibrate_channels_at_once)
+        device.close()
+        sys.exit()
+
+    measured_sampling_rate = None
+    if do_sampling_rate_measure:
+        measurment_duration = 10
+        log.info(f"Measure sample rate of device (takes about {measurment_duration} sec) ...")
+        measured_sampling_rate = measure_sampling_rate(device, sampling_rate, measurment_duration)
+        log.info(f"-> {measured_sampling_rate:.4f} Hz")
+
+    csv_file_path_zero = csv_file_path
+    for i in range(1, 100):
+        try:
+            sample(device, raw_or_volt, selected_channels, sampling_rate, vertical_scale_factor,
+                   csv_file_path, measured_sampling_rate)
+            # finished by user interaction
+            #break
+        except USBError:
+            try:
+                device.close()
+            except:
+                pass
+            device = connect(vertical_scale_factor, correction_data, zero_offset_shift_compensation_channel,
+                                 zero_offset_shift_compensation_function,
+                                 zero_offset_shift_compensation_function_time_offset_sec)
+            csv_file_path = f"{csv_file_path_zero}.{i:02d}"
+
+    log.info("Exporting data finished")
+    device.close()
+
+
+def connect(vertical_scale_factor: Union[float, List[float]] = 1.0,
+            correction_data: Optional[CorrectionDataType] = None,
+            zero_offset_shift_compensation_channel: Optional[int] = None,
+            zero_offset_shift_compensation_function: Optional[ZeroOffsetShiftCompensationFunctionType] = None,
+            zero_offset_shift_compensation_function_time_offset_sec: Optional[int] = 0):
+    device = Hantek1008(vertical_scale_factor=vertical_scale_factor,
                         correction_data=correction_data,
                         zero_offset_shift_compensation_channel=zero_offset_shift_compensation_channel,
                         zero_offset_shift_compensation_function=zero_offset_shift_compensation_function,
                         zero_offset_shift_compensation_function_time_offset_sec
-                        =zero_offset_shift_compensation_function_time_offset_sec
-                        )
+                        =zero_offset_shift_compensation_function_time_offset_sec)
 
     try:
         log.info("Connecting...")
@@ -135,18 +174,12 @@ def main(csv_file_path: str,
         device.close()
         sys.exit(0)
 
-    if calibrate_output_file_path:
-        calibration_routine(device, calibrate_output_file_path, calibrate_channels_at_once)
-        device.close()
-        sys.exit()
+    return device
 
-    measured_sampling_rate = None
-    if do_sampling_rate_measure:
-        measurment_duration = 10
-        log.info(f"Measure sample rate of device (takes about {measurment_duration} sec) ...")
-        measured_sampling_rate = measure_sampling_rate(device, sampling_rate, measurment_duration)
-        log.info(f"-> {measured_sampling_rate:.4f} Hz")
 
+def sample(device: Hantek1008, raw_or_volt: bool, selected_channels: List[int], sampling_rate:float,
+           vertical_scale_factor: float, csv_file_path: str,
+           measured_sampling_rate: float = None):
     log.info(f"Processing data of channel{'' if len(selected_channels) == 1 else 's'}:"
              f" {' '.join([str(i+1) for i in selected_channels])}")
 
@@ -179,7 +212,8 @@ def main(csv_file_path: str,
         for vscale, zero_offset in sorted(device.get_zero_offsets().items()):
             csv_file.write(f"# zero_offset [{vscale:<4}]: {' '.join([str(round(v, 1)) for v in zero_offset])}\n")
 
-        if roll_mode:
+        #if roll_mode:
+        if True:
             for channel_data in device.request_samples_roll_mode(mode=raw_or_volt, sampling_rate=sampling_rate):
                 channel_data = [channel_data[ch] for ch in selected_channels]
                 milli_volt_int_representation = False
@@ -205,9 +239,6 @@ def main(csv_file_path: str,
 
     if csv_file:
         csv_file.close()
-    log.info("Exporting data finished")
-
-    device.close()
 
 
 def measure_sampling_rate(device: Hantek1008, used_sampling_rate: int, measurment_duration: float) -> float:

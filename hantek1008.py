@@ -67,7 +67,7 @@ class Hantek1008Raw:
 
         # dict of list of shorts, outer dict is of size 3 and contains values
         # for every vertical scale factor, inner list contains an zero offset per channel
-        self.__zero_offsets: Dict[float, List[int]] = None
+        self._zero_offsets: Dict[float, List[int]] = None
 
         self.__out = None  # the usb out endpoint
         self.__in = None  # the usb in endpoint
@@ -267,7 +267,7 @@ class Hantek1008Raw:
 
     def _init2(self):
         """calibrate"""
-        self.__zero_offsets = {}
+        self._zero_offsets = {}
         for vscale_id in range(1, 4):
             vscale = Hantek1008Raw._vertical_scale_id_to_factor(vscale_id)
 
@@ -290,7 +290,7 @@ class Hantek1008Raw:
             shorts = Hantek1008Raw.__from_bytes_to_shorts(samples)
             zero_offset_per_channel = [sum(channel_data) / float(len(channel_data))
                                        for channel_data in Hantek1008Raw.__to_per_channel_lists(shorts)]
-            self.__zero_offsets[vscale] = zero_offset_per_channel
+            self._zero_offsets[vscale] = zero_offset_per_channel
 
     def _init3(self):
         self.__send_cmd(0xf6, sec_till_response_request=0.2132)
@@ -445,7 +445,7 @@ class Hantek1008Raw:
             pass
 
     def get_zero_offsets(self) -> Dict[float, List[float]]:
-        return copy.deepcopy(self.__zero_offsets)
+        return copy.deepcopy(self._zero_offsets)
 
     def get_zero_offset(self, channel_id: int, vscale: Optional[float] = None) -> float:
         assert channel_id in Hantek1008Raw.valid_channel_ids()
@@ -454,7 +454,7 @@ class Hantek1008Raw:
         if vscale is None:
             vscale = self.get_vscale(channel_id)
 
-        return self.__zero_offsets[vscale][channel_id]
+        return self._zero_offsets[vscale][channel_id]
 
     @staticmethod
     def get_generator_waveform_max_length() -> int:
@@ -623,7 +623,7 @@ class Hantek1008(Hantek1008Raw):
         # TODO problem zero offset different on different vscales?
         zoscc_vscale = Hantek1008Raw.get_vscale(self, self.__zero_offset_shift_compensation_channel)
         assert zoscc_vscale == 1.0  # is this really necessary?
-        zoscc_zero_offset = self.__zero_offsets[zoscc_vscale][self.__zero_offset_shift_compensation_channel]
+        zoscc_zero_offset = self._zero_offsets[zoscc_vscale][self.__zero_offset_shift_compensation_channel]
 
         adaption_factor = 0.00002  # [0,1]
         for v in zero_readings:

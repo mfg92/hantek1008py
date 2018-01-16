@@ -12,6 +12,7 @@ import sys
 import csv
 import math
 from usb.core import USBError
+from time import sleep
 
 assert sys.version_info >= (3, 6)
 
@@ -122,20 +123,29 @@ def main(csv_file_path: str,
         log.info(f"-> {measured_sampling_rate:.4f} Hz")
 
     csv_file_path_zero = csv_file_path
+
+    # data collection is in loop because in case of an error it restarts the collection
     for i in range(1, 100):
         try:
             sample(device, raw_or_volt, selected_channels, sampling_rate, vertical_scale_factor,
                    csv_file_path, measured_sampling_rate)
-            # finished by user interaction
-            #break
-        except USBError:
+            # no error? -> finished by user interaction
+            break
+        except USBError as usb_error:
+            # usb error bug occurred? try to close the device or reset it, sleep a sec and restart
+            log.error(usb_error)
             try:
                 device.close()
             except:
-                pass
+                try:
+                    sleep(0.5)
+                    device._dev.reset()
+                except:
+                    pass
+            sleep(1.0)
             device = connect(vertical_scale_factor, correction_data, zero_offset_shift_compensation_channel,
-                                 zero_offset_shift_compensation_function,
-                                 zero_offset_shift_compensation_function_time_offset_sec)
+                             zero_offset_shift_compensation_function,
+                             zero_offset_shift_compensation_function_time_offset_sec)
             csv_file_path = f"{csv_file_path_zero}.{i:02d}"
 
     log.info("Exporting data finished")

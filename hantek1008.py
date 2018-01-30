@@ -10,8 +10,8 @@ from threading import Thread
 import copy
 import sys
 
-# marking a child classes method with overrides makes shour the methode overrides a parent class methode
-# this check is only needed during development so its no problem if this packe is not installed
+# marking a child classes method with overrides makes sure the method overrides a parent class method
+# this check is only needed during development so its no problem if this package is not installed
 # to avoid errors we need to define a dummy decorator
 try:
     from overrides import overrides

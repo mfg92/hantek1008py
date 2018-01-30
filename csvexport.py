@@ -146,7 +146,8 @@ def main(csv_file_path: str,
             device = connect(vertical_scale_factor, correction_data, zero_offset_shift_compensation_channel,
                              zero_offset_shift_compensation_function,
                              zero_offset_shift_compensation_function_time_offset_sec)
-            csv_file_path = f"{csv_file_path_zero}.{i:02d}"
+            if csv_file_path_zero != '-':
+                csv_file_path = f"{csv_file_path_zero}.{i:02d}"
 
     log.info("Exporting data finished")
     device.close()

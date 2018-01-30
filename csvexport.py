@@ -9,10 +9,10 @@ import datetime
 import os
 import lzma
 import sys
-import csv
 import math
 from usb.core import USBError
 from time import sleep
+from csvwriter import ThreadedCsvWriter
 
 assert sys.version_info >= (3, 6)
 
@@ -207,31 +207,34 @@ def sample(device: Hantek1008, raw_or_volt: bool, selected_channels: List[int], 
         else:
             log.info(f"Exporting data to file '{csv_file_path}'...")
             csv_file = open(csv_file_path, 'at', newline='')
-        csv_writer = csv.writer(csv_file, delimiter=',')
+        #csv_writer = csv.writer(csv_file, delimiter=',')
+        csv_writer = ThreadedCsvWriter(csv_file, delimiter=',')
         # channel >= 8 are the raw values of the corresponding channels < 8
         channel_titles = [f'ch_{i+1 if i < 8 else (str(i+1-8)+"_raw")}' for i in selected_channels]
-        csv_file.write(f"# {', '.join(channel_titles)}\n")
-        csv_file.write(f"# samplingrate: {sampling_rate} Hz\n")
+        csv_writer.write_comment(f"{', '.join(channel_titles)}")
+        csv_writer.write_comment(f"samplingrate: {sampling_rate} Hz")
         if measured_sampling_rate:
-            csv_file.write(f"# measured samplingrate: {measured_sampling_rate} Hz\n")
+            csv_writer.write_comment(f"measured samplingrate: {measured_sampling_rate} Hz")
         now = datetime.datetime.now()
-        csv_file.write(f"# UNIX-Time: {now.timestamp()}\n")
-        csv_file.write(f"# UNIX-Time: {now.isoformat()}\n")
-        csv_file.write(f"# vscale: {', '.join(str(f) for f in vertical_scale_factor)}\n")
-        csv_file.write("# zero offset data:\n")
+        csv_writer.write_comment(f"UNIX-Time: {now.timestamp()}")
+        csv_writer.write_comment(f"UNIX-Time: {now.isoformat()}")
+        csv_writer.write_comment(f"vscale: {', '.join(str(f) for f in vertical_scale_factor)}")
+        csv_writer.write_comment("# zero offset data:")
         for vscale, zero_offset in sorted(device.get_zero_offsets().items()):
-            csv_file.write(f"# zero_offset [{vscale:<4}]: {' '.join([str(round(v, 1)) for v in zero_offset])}\n")
+            csv_writer.write_comment(f"zero_offset [{vscale:<4}]: {' '.join([str(round(v, 1)) for v in zero_offset])}")
 
-        #if roll_mode:
-        if True:
+        # TODO: make these configurable
+        roll_mode = True
+        milli_volt_int_representation = False
+
+        if roll_mode:
             for channel_data in device.request_samples_roll_mode(mode=raw_or_volt, sampling_rate=sampling_rate):
                 channel_data = [channel_data[ch] for ch in selected_channels]
-                milli_volt_int_representation = False
                 if milli_volt_int_representation:
                     channel_data = [[f"{round(value*1000)}" for value in single_channel]
                                     for single_channel in channel_data]
-                csv_writer.writerows(zip(*channel_data))
-                csv_file.write(f"# UNIX-Time: {datetime.datetime.now().timestamp()}\n")
+                csv_writer.write_rows(zip(*channel_data))
+                csv_writer.write_comment(f"UNIX-Time: {datetime.datetime.now().timestamp()}")
         else:
             while True:
                 channel_data2, channel_data3 = device.request_samples_burst_mode()
@@ -240,15 +243,15 @@ def sample(device: Hantek1008, raw_or_volt: bool, selected_channels: List[int], 
                 # channel_data = [cd2 + cd3 for cd2, cd3 in zip(channel_data2, channel_data3)]
                 # channel_data = [cd[70:] + cd[:70] for cd in channel_data]
 
-                csv_writer.writerows(zip(*channel_data2))
-                csv_writer.writerows(zip(*channel_data3))
-                csv_file.write(f"# UNIX-Time: { datetime.datetime.now().timestamp()}\n")
+                csv_writer.write_rows(zip(*channel_data2))
+                csv_writer.write_rows(zip(*channel_data3))
+                csv_writer.write_comment(f"UNIX-Time: { datetime.datetime.now().timestamp()}")
     except KeyboardInterrupt:
         log.info("Sample collection was stopped by user")
         pass
 
-    if csv_file:
-        csv_file.close()
+    if csv_writer:
+        csv_writer.close()
 
 
 def measure_sampling_rate(device: Hantek1008, used_sampling_rate: int, measurment_duration: float) -> float:

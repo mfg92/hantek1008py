@@ -208,25 +208,32 @@ def sample(device: Hantek1008, raw_or_volt: bool, selected_channels: List[int], 
         else:
             log.info(f"Exporting data to file '{csv_file_path}'...")
             csv_file = open(csv_file_path, 'at', newline='')
-        #csv_writer = csv.writer(csv_file, delimiter=',')
+
         csv_writer = ThreadedCsvWriter(csv_file, delimiter=',')
+
+        csv_writer.write_comment("HEADER")
+
         # channel >= 8 are the raw values of the corresponding channels < 8
         channel_titles = [f'ch_{i+1 if i < 8 else (str(i+1-8)+"_raw")}' for i in selected_channels]
         csv_writer.write_comment(f"{', '.join(channel_titles)}")
+
         csv_writer.write_comment(f"samplingrate: {sampling_rate} Hz")
         if measured_sampling_rate:
             csv_writer.write_comment(f"measured samplingrate: {measured_sampling_rate} Hz")
+
         now = datetime.datetime.now()
         utcnow = datetime.datetime.utcnow()
         csv_writer.write_comment(f"UNIX-Time: {now.timestamp()}")
         csv_writer.write_comment(f"UNIX-Time: {now.isoformat()}")
         csv_writer.write_comment(f"UNIX-Time: {utcnow.timestamp()} UTC")
         csv_writer.write_comment(f"UNIX-Time: {utcnow.isoformat()} UTC")
+
         csv_writer.write_comment(f"vscale: {', '.join(str(f) for f in vertical_scale_factor)}")
         csv_writer.write_comment("# zero offset data:")
         for vscale, zero_offset in sorted(device.get_zero_offsets().items()):
             csv_writer.write_comment(f"zero_offset [{vscale:<4}]: {' '.join([str(round(v, 1)) for v in zero_offset])}")
 
+        csv_writer.write_comment(f"DATA")
         # TODO: make these configurable
         roll_mode = True
         milli_volt_int_representation = False

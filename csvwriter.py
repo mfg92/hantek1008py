@@ -42,7 +42,7 @@ class ThreadedCsvWriter(CsvWriter):
 
     @overrides
     def write_comment(self, comment: str):
-        self.__enqueue_work(super().write_comment, f"# {comment}")
+        self.__enqueue_work(super().write_comment, comment)
 
     @overrides
     def write_row(self, row):

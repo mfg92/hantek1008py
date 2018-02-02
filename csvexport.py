@@ -217,8 +217,11 @@ def sample(device: Hantek1008, raw_or_volt: bool, selected_channels: List[int], 
         if measured_sampling_rate:
             csv_writer.write_comment(f"measured samplingrate: {measured_sampling_rate} Hz")
         now = datetime.datetime.now()
+        utcnow = datetime.datetime.utcnow()
         csv_writer.write_comment(f"UNIX-Time: {now.timestamp()}")
         csv_writer.write_comment(f"UNIX-Time: {now.isoformat()}")
+        csv_writer.write_comment(f"UNIX-Time: {utcnow.timestamp()} UTC")
+        csv_writer.write_comment(f"UNIX-Time: {utcnow.isoformat()} UTC")
         csv_writer.write_comment(f"vscale: {', '.join(str(f) for f in vertical_scale_factor)}")
         csv_writer.write_comment("# zero offset data:")
         for vscale, zero_offset in sorted(device.get_zero_offsets().items()):
@@ -235,7 +238,7 @@ def sample(device: Hantek1008, raw_or_volt: bool, selected_channels: List[int], 
                     channel_data = [[f"{round(value*1000)}" for value in single_channel]
                                     for single_channel in channel_data]
                 csv_writer.write_rows(zip(*channel_data))
-                csv_writer.write_comment(f"UNIX-Time: {datetime.datetime.now().timestamp()}")
+                csv_writer.write_comment(f"UNIX-Time: {datetime.datetime.utcnow().timestamp()} UTC")
         else:
             while True:
                 channel_data2, channel_data3 = device.request_samples_burst_mode()
@@ -246,7 +249,7 @@ def sample(device: Hantek1008, raw_or_volt: bool, selected_channels: List[int], 
 
                 csv_writer.write_rows(zip(*channel_data2))
                 csv_writer.write_rows(zip(*channel_data3))
-                csv_writer.write_comment(f"UNIX-Time: { datetime.datetime.now().timestamp()}")
+                csv_writer.write_comment(f"UNIX-Time: { datetime.datetime.utcnow().timestamp()} UTC")
     except KeyboardInterrupt:
         log.info("Sample collection was stopped by user")
         pass

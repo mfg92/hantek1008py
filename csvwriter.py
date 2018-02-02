@@ -27,6 +27,9 @@ class CsvWriter:
     def write_rows(self, rows):
         self.__csv_writer.writerows(rows)
 
+    def close(self):
+        self.__csv_file.close()
+
 
 class ThreadedCsvWriter(CsvWriter):
     """
@@ -63,6 +66,6 @@ class ThreadedCsvWriter(CsvWriter):
     def close(self):
         def stop():
             self.__closed = True
-            self.__csv_file.close()
+            super().close()
         self.__enqueue_work(stop)
         self.__work_thread.join()

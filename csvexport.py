@@ -12,7 +12,7 @@ import sys
 import math
 from usb.core import USBError
 from time import sleep
-from csvwriter import ThreadedCsvWriter
+from utils.csvwriter import ThreadedCsvWriter
 
 assert sys.version_info >= (3, 6)
 

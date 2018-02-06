@@ -54,7 +54,7 @@ def main():
             parser.error(fail_message)
 
     parser = argparse.ArgumentParser(description="")
-    parser.add_argument("csvfile",
+    parser.add_argument("csv_input",
                         type=str, default=None,
                         help="The data file. Can be '-' to take STDIN as data source.")
     # TODO: at the moment channel means column not the real channel used
@@ -63,6 +63,10 @@ def main():
                         type=va_pair_type, default=None,
                         help="What channels belong together. Format is: "
                              "{volt_channel}:{ampere_channel}:{name} e.g. '1:2:L1'")
+    parser.add_argument("-o", "--output", dest="csv_output",
+                        type=str, default="-",
+                        help="The output file. If it is '-', STDOUT is used. If it is '.', it will use the "
+                             "inputfilename and append 'acsv'.")
     parser.add_argument("-w", "--windowsize", dest="window_size",
                         type=int,  default=2048,
                         help="The size of the window used to analyse the data. One value of "
@@ -82,9 +86,12 @@ def main():
 
     args = parser.parse_args()
 
-    csv_writer = CsvWriter(sys.stdout, delimiter=',')
+    if args.csv_input == "-":
+        arg_assert(args.csv_output != ".", "If input is read from STDIN, '.' as argument for "
+                                           "the output file is not allowed.")
+    args.csv_output = args.csv_output if args.csv_output != "." else f"{args.csv_input}.acsv"
 
-    source_csv_file = sys.stdin if args.csvfile == "-" else open_csv_file(args.csvfile)
+    csv_input_file = sys.stdin if args.csv_input == "-" else open_csv_file(args.csv_input)
 
     # read header (all comment lines before the data)
     header = []
@@ -93,13 +100,13 @@ def main():
                                       # that start with '# HEADER and the before the actual data come
                                       # a line with '# DATA' comes
     if header_data_file_format == "auto":
-        if args.csvfile == "-":
+        if args.csv_input == "-":
             header_data_file_format = True
         else:
             header_data_file_format = False
 
     while True:
-        line = source_csv_file.readline()
+        line = csv_input_file.readline()
 
         if header_data_file_format:
             if line == "# DATA\n":
@@ -128,7 +135,12 @@ def main():
         arg_assert(vap.voltage_ch < channel_count, f"Selected voltage channel {vap.voltage_ch+1} does not exist.");
         arg_assert(vap.ampere_ch < channel_count, f"Selected ampere channel {vap.ampere_ch+1} does not exist.");
 
-    csv_writer.write_comment(f"source                : {args.csvfile}")
+    csv_output_file = sys.stdout if args.csv_output == "-" else open_csv_file(args.csv_output, mode="wt")
+    csv_writer = CsvWriter(csv_output_file, delimiter=',')
+    if csv_output_file != sys.stdout:
+        print(f"Writing results to '{args.csv_output}'")
+
+    csv_writer.write_comment(f"source                : {args.csv_input}")
     csv_writer.write_comment(f"device_sampling_rate  : {device_sampling_rate}")
     csv_writer.write_comment(f"measured_sampling_rate: {measured_sampling_rate}")
     csv_writer.write_comment(f"|->sampling_rate      : {sampling_rate} Hz")
@@ -140,7 +152,7 @@ def main():
     # work in Watt*sec
     PQS_work = {pair_name: [0, 0, 0] for _, _, pair_name in args.voltamp_pairs}
     # max_list = [0 for _ in range(0, channel_count)]
-    for time, value_row in read_value(source_csv_file):
+    for time, value_row in read_value(csv_input_file):
         # for i in range(0, channel_count):
         #     max_list[i] = max(abs(value_row[i]), max_list[i])
         # continue

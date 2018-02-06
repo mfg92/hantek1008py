@@ -40,9 +40,9 @@ def parse_csv_lines(lines: List[str]) -> (List[float], List[float], List[float],
     return sampling_rate, measured_sampling_rate, unix_time, per_channel_data
 
 
-def open_csv_file(file_name: str):
+def open_csv_file(file_name: str, mode: str="rt"):
     open_function = lzma.open if file_name.endswith(".xz") else open
-    return open_function(file_name, mode="rt")
+    return open_function(file_name, mode=mode)
 
 
 def read_csv_file(file_name: str) -> List[str]:

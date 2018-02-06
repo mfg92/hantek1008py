@@ -219,6 +219,10 @@ def print_window_analysis(csv_writer: CsvWriter,
         mf_fft_max, mf_fft_parabolic, mf_fft_gaussian, mf_autocorrelate_parabolic, mf_zerocrossing =\
             analyse_channel_window(voltage_data, input_sampling_rate)
 
+        voltage_avg_local_min, voltage_avg_local_max = analyse_channel_avg_local_min_max(voltage_data)
+        voltage_avg_local_min *= voltage_scale_factor
+        voltage_avg_local_max *= voltage_scale_factor
+
         # work in Watt*sec
         PQS_work[pair_name][0] += P * delta
         PQS_work[pair_name][1] += Q * delta
@@ -234,6 +238,9 @@ def print_window_analysis(csv_writer: CsvWriter,
         csv_writer.write_row([time_str, f"{pair_name}_φ", f"{phase_angle:.3f}", "°"])
         # _U was _V in an older version
         csv_writer.write_row([time_str, f"{pair_name}_U", f"{voltage_rms:.3f}", "V"])
+        csv_writer.write_row([time_str, f"{pair_name}_U_AVGMIN", f"{voltage_avg_local_min:.3f}", "V"])
+        csv_writer.write_row([time_str, f"{pair_name}_U_AVGMAX", f"{voltage_avg_local_max:.3f}", "V"])
+        csv_writer.write_row([time_str, f"{pair_name}_U_ZOS", f"{0.5 * (voltage_avg_local_min + voltage_avg_local_max):.3f}", "V"])
         # _I was _A in an older version
         csv_writer.write_row([time_str, f"{pair_name}_I", f"{ampere_rms:.3f}", "A"])
 
@@ -242,6 +249,9 @@ def print_window_analysis(csv_writer: CsvWriter,
         csv_writer.write_row([time_str, f"{pair_name}_F_GAU", f"{mf_fft_gaussian if mf_fft_gaussian is not None else -1:.6f}", "Hz"])
         csv_writer.write_row([time_str, f"{pair_name}_F_AUT", f"{mf_autocorrelate_parabolic:.6f}", "Hz"])
         csv_writer.write_row([time_str, f"{pair_name}_F_ZC", f"{mf_zerocrossing:.6f}", "Hz"])
+
+
+
     # write sum over all voltamp pairs
     csv_writer.write_row([time_str, f"Li_PW", f"{sum(list(zip(*PQS_work.values()))[0]) * wattsec_to_wh:.6f}", "Wh"])
     csv_writer.write_row([time_str, f"Li_QW", f"{sum(list(zip(*PQS_work.values()))[1]) * wattsec_to_wh:.6f}", "Wh"])

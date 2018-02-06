@@ -15,82 +15,6 @@ import sys
 assert sys.version_info >= (3, 6)
 
 
-def analyse_channel_window(channel_values: List[float], input_sampling_rate: float):
-    length = len(channel_values)
-    fourier = numpy.fft.rfft(channel_values * numpy.blackman(length))
-    # convert complex -> real
-    fourier_amplitude = numpy.absolute(fourier)
-    fourier_phase = numpy.angle(fourier, deg=True)  # range: [-180,180]
-    fourier_frequency = numpy.fft.rfftfreq(n=length, d=1.0 / input_sampling_rate)
-    fourier_frequency_step_width = fourier_frequency[1]
-
-    # get the highest value (+ index of that)
-    max_index, max_value = max(enumerate(fourier_amplitude), key=lambda v: v[1])
-
-    # norm_fac = 1.0 / max_value  # max in result will be 1.0
-    norm_fac = 2.0 / (length/2)  # see "y-Axis: The Amplitude of the FFT Signal" in http://www.cbcity.de/die-fft-mit-python-einfach-erklaert
-    # calculate the frequency that each value in the fourier array belongs to,
-    # and than builds pairs of frequency and intensity)
-    fft_amplitude_points = list(zip(fourier_frequency, fourier_amplitude * norm_fac))
-    # does the same as the code above, but is 5x slower
-    # fft_points = [(x / (2 * len(fourier)) * self.__input_sampling_rate, y * norm_fac)
-    #               for x, y in enumerate(fourier)]
-
-    # fft_points[0] is y offset (DC value)
-
-    fft_phase_points = list(zip(fourier_frequency, 0.5 + fourier_phase / 360))
-
-    auto = numpy.correlate(channel_values, channel_values, mode="full")
-    # fft_autocorrelation_points = list(zip(fourier_frequency, (auto / max(auto))[round(len(auto) / 2):]))
-
-    # print_column('fft freq steps', f'{fourier_frequency_step_width:.9f} Hz')
-
-    # amplitude_trashold = 0.1 * max_value
-    # crucial_sins = [(freq, amp, phase) for freq, amp, phase
-    #                 in zip(fourier_frequency, fourier_amplitude, fourier_phase)
-    #                 if amp >= amplitude_trashold]
-    # max_sin = max(crucial_sins, key=lambda v: v[1])
-    # print(sep="\n", *(f"{freq:7.3f} Hz, {(max(phase,max_sin[2])-min(phase, max_sin[2])):6.2f}°: {amp:.3f}"
-    #                   for freq, amp, phase in crucial_sins))
-
-    main_frequency = fft_amplitude_points[max_index][0]
-    main_frequency_phase = fft_phase_points[max_index][0]
-
-    # print_column('main frequency(fft, max)', f'{main_frequency:.4f} Hz + {main_frequency_phase:6.2f}°')
-    mf_fft_parabolic = mf_fft_gaussian = None
-    if 0 < max_index < len(fft_amplitude_points):
-        mf_fft_parabolic = electro.parabolic_interpolation(fourier_amplitude, max_index) * fourier_frequency_step_width
-        mf_fft_gaussian = electro.gaussian_interpolation(fourier_amplitude, max_index) * fourier_frequency_step_width
-
-    mf_autocorrelate_parabolic = electro.measure_main_frequency_autocorrelate(channel_values, input_sampling_rate)
-    mf_zerocrossing = electro.measure_main_frequency_zero_crossing(channel_values, input_sampling_rate)
-
-    # print_column('min/rms/max', f'{min(channel_values_part):.4f} / '
-    #                             f'{electro.rms(channel_values_part):.4f} / '
-    #                             f'{max(channel_values_part):.4f}')
-
-    return main_frequency, mf_fft_parabolic, mf_fft_gaussian, mf_autocorrelate_parabolic, mf_zerocrossing
-
-
-def analyse_pair_window(voltage_channel_values: List[float], ampere_channel_values: List[float],
-                        input_sampling_rate: float,
-                        voltage_scale_factor: float,
-                        voltage_to_ampere_factor: float):
-    voltage_channel_values_part = [v * voltage_scale_factor for v in voltage_channel_values]
-    ampere_channel_values_part = [v * voltage_to_ampere_factor for v in ampere_channel_values]
-
-    P, Q, S = electro.calc_power(voltage_channel_values_part, ampere_channel_values_part, input_sampling_rate)
-    phase_angle = math.acos(P / S)
-    voltage_rms = electro.rms(voltage_channel_values_part)
-    ampere_rms = electro.rms(ampere_channel_values_part)
-    return P, Q, S, phase_angle, voltage_rms, ampere_rms
-
-    # print_column("power (P/Q/S)", f"{P:.4f} W / {Q:.4f} var / {S:.4f} VA")
-    # print_column("\->phase angle φ", f"{phase_angle:.4f}°")
-    # print_column("voltage rms", f"{volatge_rms:0.4f} V")
-    # print_column("ampere rms", f"{ampere_rms:0.4f} A")
-
-
 VoltAmpChPair = namedtuple("VoltAmpChPair", ["voltage_ch", "ampere_ch", "name"])
 
 
@@ -310,6 +234,94 @@ def print_window_analysis(csv_writer: CsvWriter,
     csv_writer.write_row([time_str, f"Li_PW", f"{sum(list(zip(*PQS_work.values()))[0]) * wattsec_to_wh:.6f}", "Wh"])
     csv_writer.write_row([time_str, f"Li_QW", f"{sum(list(zip(*PQS_work.values()))[1]) * wattsec_to_wh:.6f}", "Wh"])
     csv_writer.write_row([time_str, f"Li_SW", f"{sum(list(zip(*PQS_work.values()))[2]) * wattsec_to_wh:.6f}", "Wh"])
+
+
+def analyse_channel_window(channel_values: List[float], input_sampling_rate: float) \
+        -> (float, float, float, float, float):
+    length = len(channel_values)
+    fourier = numpy.fft.rfft(channel_values * numpy.blackman(length))
+    # convert complex -> real
+    fourier_amplitude = numpy.absolute(fourier)
+    fourier_phase = numpy.angle(fourier, deg=True)  # range: [-180,180]
+    fourier_frequency = numpy.fft.rfftfreq(n=length, d=1.0 / input_sampling_rate)
+    fourier_frequency_step_width = fourier_frequency[1]
+
+    # get the highest value (+ index of that)
+    max_index, max_value = max(enumerate(fourier_amplitude), key=lambda v: v[1])
+
+    # norm_fac = 1.0 / max_value  # max in result will be 1.0
+    norm_fac = 2.0 / (length/2)  # see "y-Axis: The Amplitude of the FFT Signal" in http://www.cbcity.de/die-fft-mit-python-einfach-erklaert
+    # calculate the frequency that each value in the fourier array belongs to,
+    # and than builds pairs of frequency and intensity)
+    fft_amplitude_points = list(zip(fourier_frequency, fourier_amplitude * norm_fac))
+    # does the same as the code above, but is 5x slower
+    # fft_points = [(x / (2 * len(fourier)) * self.__input_sampling_rate, y * norm_fac)
+    #               for x, y in enumerate(fourier)]
+
+    # fft_points[0] is y offset (DC value)
+
+    fft_phase_points = list(zip(fourier_frequency, 0.5 + fourier_phase / 360))
+
+    auto = numpy.correlate(channel_values, channel_values, mode="full")
+    # fft_autocorrelation_points = list(zip(fourier_frequency, (auto / max(auto))[round(len(auto) / 2):]))
+
+    # print_column('fft freq steps', f'{fourier_frequency_step_width:.9f} Hz')
+
+    # amplitude_trashold = 0.1 * max_value
+    # crucial_sins = [(freq, amp, phase) for freq, amp, phase
+    #                 in zip(fourier_frequency, fourier_amplitude, fourier_phase)
+    #                 if amp >= amplitude_trashold]
+    # max_sin = max(crucial_sins, key=lambda v: v[1])
+    # print(sep="\n", *(f"{freq:7.3f} Hz, {(max(phase,max_sin[2])-min(phase, max_sin[2])):6.2f}°: {amp:.3f}"
+    #                   for freq, amp, phase in crucial_sins))
+
+    main_frequency = fft_amplitude_points[max_index][0]
+    main_frequency_phase = fft_phase_points[max_index][0]
+
+    # print_column('main frequency(fft, max)', f'{main_frequency:.4f} Hz + {main_frequency_phase:6.2f}°')
+    mf_fft_parabolic = mf_fft_gaussian = None
+    if 0 < max_index < len(fft_amplitude_points):
+        mf_fft_parabolic = electro.parabolic_interpolation(fourier_amplitude, max_index) * fourier_frequency_step_width
+        mf_fft_gaussian = electro.gaussian_interpolation(fourier_amplitude, max_index) * fourier_frequency_step_width
+
+    mf_autocorrelate_parabolic = electro.measure_main_frequency_autocorrelate(channel_values, input_sampling_rate)
+    mf_zerocrossing = electro.measure_main_frequency_zero_crossing(channel_values, input_sampling_rate)
+
+    # print_column('min/rms/max', f'{min(channel_values_part):.4f} / '
+    #                             f'{electro.rms(channel_values_part):.4f} / '
+    #                             f'{max(channel_values_part):.4f}')
+
+    return main_frequency, mf_fft_parabolic, mf_fft_gaussian, mf_autocorrelate_parabolic, mf_zerocrossing
+
+
+def analyse_pair_window(voltage_channel_values: List[float], ampere_channel_values: List[float],
+                        input_sampling_rate: float,
+                        voltage_scale_factor: float,
+                        voltage_to_ampere_factor: float)\
+        -> (float, float, float, float, float, float):
+    voltage_channel_values_part = [v * voltage_scale_factor for v in voltage_channel_values]
+    ampere_channel_values_part = [v * voltage_to_ampere_factor for v in ampere_channel_values]
+
+    P, Q, S = electro.calc_power(voltage_channel_values_part, ampere_channel_values_part, input_sampling_rate)
+    phase_angle = math.acos(P / S)
+    voltage_rms = electro.rms(voltage_channel_values_part)
+    ampere_rms = electro.rms(ampere_channel_values_part)
+    return P, Q, S, phase_angle, voltage_rms, ampere_rms
+
+    # print_column("power (P/Q/S)", f"{P:.4f} W / {Q:.4f} var / {S:.4f} VA")
+    # print_column("\->phase angle φ", f"{phase_angle:.4f}°")
+    # print_column("voltage rms", f"{volatge_rms:0.4f} V")
+    # print_column("ampere rms", f"{ampere_rms:0.4f} A")
+
+
+def analyse_channel_avg_local_min_max(channel_values: List[float]) -> (float, float):
+    def neighbor_iterator(values: List):
+        for i in range(1, len(values)-1):
+            yield values[i-1:i+2]
+
+    local_min_values = [v for l, v, r in neighbor_iterator(channel_values) if l > v < r]
+    local_max_values = [v for l, v, r in neighbor_iterator(channel_values) if l < v > r]
+    return numpy.mean(local_min_values), numpy.mean(local_max_values)
 
 
 if __name__ == '__main__':

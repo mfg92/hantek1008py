@@ -24,7 +24,7 @@ def main():
         # vaild str eg 1:4
         match = re.match(r"(\d):(\d):([A-Za-z0-9_]+)", value)
         if not match:
-            raise argparse.ArgumentTypeError(f"Invalid syntax. Voltage-Ampere-Pairs have to be in"
+            raise argparse.ArgumentTypeError(f"Invalid syntax. Voltage-Ampere-Pairs have to be in "
                                              f"the format: v:a:NAME eg. 1:4:L1")
 
         volt_amp_ch_pair = VoltAmpChPair(int(match.group(1)),

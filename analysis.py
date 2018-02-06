@@ -4,7 +4,8 @@ import argparse
 from typing import List, Dict
 import numpy
 from utils.common import parse_csv_lines, open_csv_file
-import utils.electro
+import utils.electro as electro
+import utils.common as common
 import math
 import re
 from collections import namedtuple

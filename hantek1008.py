@@ -619,6 +619,15 @@ class Hantek1008(Hantek1008Raw):
             = zero_offset_shift_compensation_function
         self.__start_monotonic_time = time.monotonic() - zero_offset_shift_compensation_function_time_offset_sec
 
+    def get_used_zero_offsets_shift_compensation_method(self)-> Optional[str]:
+        assert not (self.__zero_offset_shift_compensation_channel
+                    and self.__zero_offset_shift_compensation_function)
+        if self.__zero_offset_shift_compensation_channel:
+            return f"channel {self.__zero_offset_shift_compensation_channel}"
+        if self.__zero_offset_shift_compensation_function:
+            return f"function {self.__zero_offset_shift_compensation_function}"
+        return None
+
     def __update_zero_offset_compensation_value(self, zero_readings: List[float]) -> None:
         # TODO problem zero offset different on different vscales?
         zoscc_vscale = Hantek1008Raw.get_vscale(self, self.__zero_offset_shift_compensation_channel)

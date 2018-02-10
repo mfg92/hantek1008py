@@ -80,6 +80,9 @@ def main():
     parser.add_argument("--v2afactor", dest="voltage_to_ampere_factor",
                         type=float, default=2.857,
                         help="Ampere values are scale with this factor before any analysis happens.")
+    parser.add_argument("--start", dest="start_sec",
+                        type=float, default=0,
+                        help="Amount of seconds of the data to be skipped at the beginning.")
     # parser.add_argument("-s", "--channels", metavar="channel", nargs="+",
     #                     type=channel_type, default=None,
     #                     help="Select channels that are of interest")
@@ -120,9 +123,11 @@ def main():
             channel_names_line = line
         header.append(line)
 
-    device_sampling_rate, measured_sampling_rate, _, per_channel_data = parse_csv_lines(header)
+    device_sampling_rate, measured_sampling_rate, start_time, per_channel_data = parse_csv_lines(header)
 
     sampling_rate = ["unknown", *device_sampling_rate, *measured_sampling_rate][-1]
+    assert len(start_time), "There should be exactly one timestamp in the header"
+    start_time = start_time[0]
     channel_count = len(channel_names_line.split(","))
     args.voltamp_pairs = [VoltAmpChPair(vap.voltage_ch-1, vap.ampere_ch-1, vap.name) for vap in args.voltamp_pairs]
 
@@ -145,6 +150,7 @@ def main():
     csv_writer.write_comment(f"measured_sampling_rate: {measured_sampling_rate}")
     csv_writer.write_comment(f"|->sampling_rate      : {sampling_rate} Hz")
     csv_writer.write_comment(f"channel count         : {channel_count}")
+    csv_writer.write_comment(f"UNIX time of CSV      : {start_time}")
     csv_writer.write_comment(f"voltage ampere pairs  : {', '.join(f'{name}: {v_ch+1} and {a_ch+1}' for v_ch, a_ch, name in args.voltamp_pairs)}")
 
     values = []
@@ -156,6 +162,10 @@ def main():
         # for i in range(0, channel_count):
         #     max_list[i] = max(abs(value_row[i]), max_list[i])
         # continue
+        # skip first args.start_sec seconds of data
+        if time < start_time + args.start_sec:
+            continue
+
         values.append(value_row)
 
         if len(values) == args.window_size:

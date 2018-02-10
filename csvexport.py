@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
-
 from hantek1008 import Hantek1008, CorrectionDataType, ZeroOffsetShiftCompensationFunctionType
-from typing import Union, Optional, List, Dict, Tuple, Callable, Generator
+from typing import Union, Optional, List, Dict, Tuple, Callable, Generator, Any
 import logging as log
 import argparse
 import time
@@ -19,7 +18,7 @@ assert sys.version_info >= (3, 6)
 
 def main(csv_file_path: str,
          selected_channels: Optional[List[int]]=None,
-         vertical_scale_factor: Optional[List[float]]=1.0,
+         vertical_scale_factor: Optional[List[float]]=[1.0],
          calibrate_output_file_path: Optional[str]=None,
          calibrate_channels_at_once: Optional[int]=None,
          calibration_file_path: Optional[str]=None,
@@ -66,7 +65,7 @@ def main(csv_file_path: str,
 
     zero_offset_shift_compensation_function = None
     if zero_offset_shift_compensation_function_file_path:
-        globals_dict = {}
+        globals_dict: Dict[str, Any] = {}
         with check_and_open_file(zero_offset_shift_compensation_function_file_path) as f:
             exec(f.read(), globals_dict)
         zero_offset_shift_compensation_function = globals_dict["calc_zos"]
@@ -170,7 +169,7 @@ def connect(vertical_scale_factor: Union[float, List[float]] = 1.0,
         try:
             device.connect()
         except RuntimeError as e:
-            log.error(e)
+            log.error(str(e))
             sys.exit(1)
         log.info("Connection established")
 
@@ -178,7 +177,7 @@ def connect(vertical_scale_factor: Union[float, List[float]] = 1.0,
         try:
             device.init()
         except RuntimeError as e:
-            log.error(e)
+            log.error(str(e))
             sys.exit(1)
         log.info("Initialisation completed")
     except KeyboardInterrupt:
@@ -188,8 +187,8 @@ def connect(vertical_scale_factor: Union[float, List[float]] = 1.0,
     return device
 
 
-def sample(device: Hantek1008, raw_or_volt: bool, selected_channels: List[int], sampling_rate:float,
-           vertical_scale_factor: float, csv_file_path: str,
+def sample(device: Hantek1008, raw_or_volt: str, selected_channels: List[int], sampling_rate:float,
+           vertical_scale_factor: List[float], csv_file_path: str,
            measured_sampling_rate: float = None):
     log.info(f"Processing data of channel{'' if len(selected_channels) == 1 else 's'}:"
              f" {' '.join([str(i+1) for i in selected_channels])}")
@@ -267,10 +266,10 @@ def sample(device: Hantek1008, raw_or_volt: bool, selected_channels: List[int], 
         csv_writer.close()
 
 
-def measure_sampling_rate(device: Hantek1008, used_sampling_rate: int, measurment_duration: float) -> float:
+def measure_sampling_rate(device: Hantek1008, used_sampling_rate: float, measurment_duration: float) -> float:
     required_samples = max(4, int(math.ceil(measurment_duration * used_sampling_rate)))
     counter = -1
-    start_time = 0
+    start_time: float = 0
     for data in device.request_samples_roll_mode(sampling_rate=used_sampling_rate):
         if counter == -1:  # skip first samples to ignore the duration of initialisation
             start_time = time.perf_counter()
@@ -293,7 +292,7 @@ def calibration_routine(device: Hantek1008, calibrate_file_path: str, channels_a
 
     import json
     required_calibration_samples_nun = 512
-    calibration_data = {}  # dictionary of lists
+    calibration_data: Dict[int, List[Dict[str, Any]]] = {}  # dictionary of lists
     device.pause()
 
     test_voltages = None

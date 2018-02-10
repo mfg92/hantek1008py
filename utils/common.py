@@ -1,5 +1,5 @@
 import re
-from typing import List, Callable
+from typing import List, Callable, Tuple
 import lzma
 import time
 import math
@@ -20,7 +20,8 @@ def csv_file_type(file_path: str):
         raise argparse.ArgumentTypeError(f"There is no file '{file_path}' or can not open it.")
 
 
-def parse_csv_lines(lines: List[str]) -> (List[float], List[float], List[float], List[List[float]]):
+def parse_csv_lines(lines: List[str]) \
+        -> Tuple[List[float], List[float], List[float], List[List[float]]]:
     measured_sampling_rate = [float(measured_sampling_rate_regex.search(line).group(2))
                               for line in lines
                               if line[0] == "#" and measured_sampling_rate_regex.search(line)]
@@ -50,14 +51,18 @@ def read_csv_file(file_name: str) -> List[str]:
         return f.readlines()
 
 
-def parse_csv_file(file_name: str) ->[List[float], List[float], List[float], List[List[float]]]:
+def parse_csv_file(file_name: str) \
+        -> Tuple[List[float], List[float], List[float], List[List[float]]]:
     """
     Parse a file chunk for chunk: reading up to chunk_size bytes, parse them
     and finally merge all data of all pared chunks together
     :param file_name:
     :return:
     """
-    sampling_rate, measured_sampling_rate, unix_time, per_channel_data = [], [], [], None
+    sampling_rate: List[float] = []
+    measured_sampling_rate: List[float] = []
+    unix_time: List[float] = []
+    per_channel_data: List[List[float]] = None
 
     def on_parse_func(sampling_rate_part, measured_sampling_rate_part, unix_time_part, per_channel_data_part):
         nonlocal sampling_rate, measured_sampling_rate, unix_time, per_channel_data
@@ -94,7 +99,7 @@ def parse_csv_file_chunked(file_name: str, on_parse_func: Callable[[List[float],
 
 
 class FileChangeReader:
-    def __init__(self, file_path: str, ignore_existing_file_content: bool = True):
+    def __init__(self, file_path: str, ignore_existing_file_content: bool = True) -> None:
         self.__file_path: str = file_path
         self.__stream_position: int = 0
 
@@ -129,7 +134,7 @@ class ChannelDataUpdater(metaclass=ABCMeta):
 
 
 class CsvChannelDataUpdater(ChannelDataUpdater):
-    def __init__(self, file: FileChangeReader, buffer_size: int):
+    def __init__(self, file: FileChangeReader, buffer_size: int) -> None:
         self.__file: FileChangeReader = file
         self.__buffer_size: int = buffer_size
         self.__channel_data: List[List[float]] = [[] for _ in range(8)]
@@ -155,7 +160,7 @@ class CsvChannelDataUpdater(ChannelDataUpdater):
 
 
 class DemoChannelDataUpdater(ChannelDataUpdater):
-    def __init__(self, sampling_rate: int, buffer_size: int):
+    def __init__(self, sampling_rate: int, buffer_size: int) -> None:
         self.__sampling_rate: int = sampling_rate
         self.__buffer_size: int = buffer_size
         self.__channel_data: List[List[float]] = [[] for _ in range(8)]

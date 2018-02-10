@@ -1,4 +1,4 @@
-from typing import List, Union
+from typing import List, Union, Tuple
 from math import sqrt, log
 import numpy as np
 
@@ -58,7 +58,7 @@ def gaussian_interpolation(data: List[float], local_max_index: int) -> float:
 
 
 def measure_main_frequency_zero_crossing(data: List[float], sampling_rate: float, calc_offset: bool = False) \
-        -> float or (float, float):
+        -> Union[float, Tuple[float, float]]:
     assert sampling_rate > 0
 
     signal_avg = sum(data) / len(data)

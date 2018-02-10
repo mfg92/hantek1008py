@@ -49,7 +49,7 @@ class Hantek1008Raw:
          1.0/16: 0x24}
 
     def __init__(self, ns_per_div: int = 500_000,
-                 vertical_scale_factor: Union[float, List[float]] = 1.0):
+                 vertical_scale_factor: Union[float, List[float]] = 1.0) -> None:
         """
         :param ns_per_div:
         :param vertical_scale_factor: must be an array of length 8 with a float scale value for each channel.
@@ -67,16 +67,16 @@ class Hantek1008Raw:
 
         # dict of list of shorts, outer dict is of size 3 and contains values
         # for every vertical scale factor, inner list contains an zero offset per channel
-        self._zero_offsets: Dict[float, List[int]] = None
+        self._zero_offsets: Dict[float, List[float]] = None
 
-        self.__out = None  # the usb out endpoint
-        self.__in = None  # the usb in endpoint
-        self._dev = None  # the usb device
-        self._cfg = None  # the used usb configuration
-        self._intf = None  # the used usb interface
+        self.__out: usb.core.Endpoint = None  # the usb out endpoint
+        self.__in: usb.core.Endpoint = None  # the usb in endpoint
+        self._dev: usb.core.Device = None  # the usb device
+        self._cfg: usb.core.Configuration = None  # the used usb configuration
+        self._intf: usb.core.Interface = None  # the used usb interface
 
-        self.__pause_thread = None
-        self.__cancel_pause_thread = False
+        self.__pause_thread: Thread = None
+        self.__cancel_pause_thread: bool = False
 
     def connect(self):
         """Find a plugged hantek 1008c device and set up the connection to it"""
@@ -198,14 +198,14 @@ class Hantek1008Raw:
         assert vs_factor in Hantek1008Raw.__VSCALE_FACTORS
         return Hantek1008Raw.__VSCALE_FACTORS.index(vs_factor) + 1
 
-    def __send_set_vertical_scale(self, scale_factors: List[float] = 1.0):
+    def __send_set_vertical_scale(self, scale_factors: List[float]):
         """send the a2 command to set the vertical sample scale factor per channel.
         Only following values are allowed: 1.0, 0.125, 0.02 [TODO: check] Volt/Div.
         scale_factor must be an array of length 8 with a float scale value for each channel.
         Or a single float, than all channel will have that scale factor"""
         assert all(x in Hantek1008Raw.__VSCALE_FACTORS for x in scale_factors)
-        scale_factors = [Hantek1008Raw._vertical_scale_factor_to_id(sf) for sf in scale_factors]
-        self.__send_cmd(0xa2, parameter=scale_factors, sec_till_response_request=0.2132)
+        scale_factor_id: List[int] = [Hantek1008Raw._vertical_scale_factor_to_id(sf) for sf in scale_factors]
+        self.__send_cmd(0xa2, parameter=scale_factor_id, sec_till_response_request=0.2132)
 
     def init(self):
         self._init1()
@@ -383,7 +383,7 @@ class Hantek1008Raw:
         return list(range(0, Hantek1008Raw.channel_count()))
 
     @staticmethod
-    def valid_roll_sampling_rates() -> List[int]:
+    def valid_roll_sampling_rates() -> List[float]:
         return copy.deepcopy(list(Hantek1008Raw.__roll_mode_sampling_rate_to_id_dic.keys()))
 
     @staticmethod
@@ -594,7 +594,7 @@ class Hantek1008(Hantek1008Raw):
                  correction_data: Optional[CorrectionDataType] = None,
                  zero_offset_shift_compensation_channel: Optional[int] = None,
                  zero_offset_shift_compensation_function: Optional[ZeroOffsetShiftCompensationFunctionType] = None,
-                 zero_offset_shift_compensation_function_time_offset_sec: Optional[int] = 0):
+                 zero_offset_shift_compensation_function_time_offset_sec: Optional[int] = 0) -> None:
 
         Hantek1008Raw.__init__(self, ns_per_div, vertical_scale_factor)
 
@@ -628,7 +628,7 @@ class Hantek1008(Hantek1008Raw):
             return f"function {self.__zero_offset_shift_compensation_function}"
         return None
 
-    def __update_zero_offset_compensation_value(self, zero_readings: List[float]) -> None:
+    def __update_zero_offset_compensation_value(self, zero_readings: List[int]) -> None:
         # TODO problem zero offset different on different vscales?
         zoscc_vscale = Hantek1008Raw.get_vscale(self, self.__zero_offset_shift_compensation_channel)
         assert zoscc_vscale == 1.0  # is this really necessary?
@@ -665,21 +665,21 @@ class Hantek1008(Hantek1008Raw):
 
     @overrides
     def request_samples_roll_mode(self, sampling_rate: int = 440, mode: str = "volt") \
-            -> Generator[List[List[float]], None, None]:
+            -> Generator[List[Union[List[float], List[int]]], None, None]:
 
         assert mode in ["volt", "raw", "volt+raw"]
 
         for raw_per_channel_list in Hantek1008Raw.request_samples_roll_mode(self, sampling_rate):
             assert len(raw_per_channel_list) == 8
             assert isinstance(raw_per_channel_list[0], list)
-            result = []
+            result: List[Union[List[float], List[int]]] = []
             if "volt" in mode:
                 result += self.__extract_channel_volts(raw_per_channel_list)
             if "raw" in mode:
                 result += raw_per_channel_list
             yield result
 
-    def __extract_channel_volts(self, per_channel_lists: List[List[Union[float, int]]]) -> List[List[float]]:
+    def __extract_channel_volts(self, per_channel_lists: List[List[int]]) -> List[List[float]]:
         """Extract the voltage values from the raw byte array that came from the device"""
         if self.__zero_offset_shift_compensation_channel is not None:
             self.__update_zero_offset_compensation_value(
@@ -744,7 +744,12 @@ class Hantek1008(Hantek1008Raw):
         return (1.0 - alpha) * cfactor_less + alpha * cfactor_greater
 
     @overrides
-    def request_samples_burst_mode(self, mode: str = "volt") -> Tuple[List[List[float]], List[List[float]]]:
+    def request_samples_burst_mode(self, mode: str = "volt") \
+            -> Union[
+               Tuple[List[List[int]], List[List[int]]],
+               Tuple[List[List[float]], List[List[float]]],
+               Tuple[List[Union[List[float], List[int]]], List[Union[List[float], List[int]]]],
+               ]:
         assert mode in ["raw", "volt", "volt+raw"]
         assert self.__zero_offset_shift_compensation_channel is None, \
             "zero offset shift compensation is not implemented for burst mode"

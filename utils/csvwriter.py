@@ -66,6 +66,7 @@ class ThreadedCsvWriter(CsvWriter):
     def close(self):
         def stop():
             self.__closed = True
-            super().close()
+            # super without arguments does not work here inside a locally defined function
+            super(ThreadedCsvWriter, self).close()
         self.__enqueue_work(stop)
         self.__work_thread.join()

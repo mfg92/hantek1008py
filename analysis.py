@@ -146,13 +146,17 @@ def main():
     if csv_output_file != sys.stdout:
         print(f"Writing results to '{args.csv_output}'")
 
-    csv_writer.write_comment(f"source                : {args.csv_input}")
-    csv_writer.write_comment(f"device_sampling_rate  : {device_sampling_rate}")
-    csv_writer.write_comment(f"measured_sampling_rate: {measured_sampling_rate}")
-    csv_writer.write_comment(f"|->sampling_rate      : {sampling_rate} Hz")
-    csv_writer.write_comment(f"channel count         : {channel_count}")
-    csv_writer.write_comment(f"UNIX time of CSV      : {start_time}")
-    csv_writer.write_comment(f"voltage ampere pairs  : {', '.join(f'{name}: {v_ch+1} and {a_ch+1}' for v_ch, a_ch, name in args.voltamp_pairs)}")
+    csv_writer.write_comment(f"HEADER")
+    csv_writer.write_comment(f"source                 : {args.csv_input}")
+    csv_writer.write_comment(f"device_sampling_rate   : {device_sampling_rate}")
+    csv_writer.write_comment(f"measured_sampling_rate : {measured_sampling_rate}")
+    csv_writer.write_comment(f"|->sampling_rate       : {sampling_rate} Hz")
+    csv_writer.write_comment(f"channel count          : {channel_count}")
+    csv_writer.write_comment(f"UNIX time of CSV       : {start_time}")
+    csv_writer.write_comment(f"voltage ampere pairs   : {', '.join(f'{name}: {v_ch+1} and {a_ch+1}' for v_ch, a_ch, name in args.voltamp_pairs)}")
+    csv_writer.write_comment(f"voltage scale SV       : {args.voltage_scale_factor}")
+    csv_writer.write_comment(f"voltage to ampere scale: {args.voltage_to_ampere_factor}")
+    csv_writer.write_comment(f"DATA")
 
     values = []
     last_time = None

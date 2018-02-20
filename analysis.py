@@ -66,23 +66,24 @@ def main():
     parser.add_argument("-o", "--output", dest="csv_output",
                         type=str, default="-",
                         help="The output file. If it is '-', STDOUT is used. If it is '.', it will use the "
-                             "inputfilename and append 'acsv'.")
+                             "inputfilename and append 'acsv'. By default it prints to STDOUT.")
     parser.add_argument("-w", "--windowsize", dest="window_size",
                         type=int,  default=2048,
                         help="The size of the window used to analyse the data. One value of "
-                             "each type (e.g. frequency, rms voltage) is computed per window.")
+                             "each type (e.g. frequency, rms voltage) is computed per window. Default is 2048.")
     parser.add_argument("-s", "--stepsize", dest="step_size",
                         type=int, default=1024,
-                        help="The window is shifted about this amount after each computation round.")
+                        help="The window is shifted about this amount after each computation round. Default is 1024.")
     parser.add_argument("--voltagescale", dest="voltage_scale_factor",
                         type=float, default=200,
-                        help="Voltage values are scale with this factor before any analysis happens.")
+                        help="Voltage values are scale with this factor before any analysis happens. Default is 200.")
     parser.add_argument("--v2afactor", dest="voltage_to_ampere_factor",
-                        type=float, default=2.857,
-                        help="Ampere values are scale with this factor before any analysis happens.")
+                        # type=float, default=2.857,  #  computed default value
+                        type=float, default=2.96,  # measured default value
+                        help="Ampere values are scale with this factor before any analysis happens. Default is 2.96.")
     parser.add_argument("--start", dest="start_sec",
                         type=float, default=0,
-                        help="Amount of seconds of the data to be skipped at the beginning.")
+                        help="Amount of seconds of the data to be skipped at the beginning. Default is 0.")
     # parser.add_argument("-s", "--channels", metavar="channel", nargs="+",
     #                     type=channel_type, default=None,
     #                     help="Select channels that are of interest")

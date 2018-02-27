@@ -166,8 +166,7 @@ def measure_offset_fft(samples_a: List[float],
 
 
 def calc_power(voltage_data: List[float],
-               ampere_data: List[float],
-               sampling_rate: float):
+               ampere_data: List[float]):
     assert len(voltage_data) == len(ampere_data) > 0
 
     # P = 0  # active power/real power (Wirkleistung)

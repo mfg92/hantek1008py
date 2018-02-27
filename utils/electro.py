@@ -178,7 +178,7 @@ def calc_power(voltage_data: List[float],
     # https://electronics.stackexchange.com/questions/199395/how-to-calculate-instantaneous-active-power-from-sampled-values-of-voltage-and-c/199401#199401
     instantaneous_power = [v*a for v, a in zip(voltage_data, ampere_data)]
 
-    P = abs(np.mean(instantaneous_power))
+    P = np.mean(instantaneous_power)
     S = rms(voltage_data) * rms(ampere_data)
 
     Q = sqrt(S**2 - P**2)

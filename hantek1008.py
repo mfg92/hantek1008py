@@ -497,11 +497,13 @@ class Hantek1008Raw:
         assert len(waveform) <= 62, "Currently not supported"
         assert all(b <= 0b1111_1111 for b in waveform)
 
+        self.__send_cmd(0xb7, parameter=[0x00])
+
         # send the length of the waveform in bytes
-        self.__send_cmd(0xb7, parameter=int.to_bytes(len(waveform), length=2, byteorder="little", signed=False))
+        self.__send_cmd(0xbf, parameter=int.to_bytes(len(waveform), length=2, byteorder="little", signed=False))
 
         zeros = [0] * (62 - len(waveform))
-        self.__send_cmd(0xbf, parameter=[0x01] + waveform + zeros)
+        self.__send_cmd(0xb8, parameter=[0x01] + waveform + zeros)
 
     def __loop_f3(self) -> None:
         log.debug("start pause thread")

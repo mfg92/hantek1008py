@@ -60,11 +60,14 @@ def gaussian_interpolation(data: List[float], local_max_index: int) -> float:
 def measure_main_frequency_zero_crossing(data: List[float], sampling_rate: float, calc_offset: bool = False) \
         -> Union[float, Tuple[float, float]]:
     assert sampling_rate > 0
+    assert not calc_offset, "Offset calculation is not supported yet"
 
-    signal_avg = sum(data) / len(data)
+    data_dc = np.mean(data)
+    data_ac = [x - data_dc for x in data]  # remove dc part of signal
 
-    # data[i - 1] * data[i] < 0 only if one sample point is negative and the other one is positive
-    zero_crossings = [i for i in range(1, len(data)) if (data[i - 1] - signal_avg) * (data[i] - signal_avg) < 0.0]
+    # data_ac[i - 1] * data_ac[i] < 0 only if one sample point is negative and the other one is positive
+    zero_crossings = [i for i in range(1, len(data_ac)) if data_ac[i - 1] * data_ac[i] < 0.0]
+
     if len(zero_crossings) < 2:
         return None
 
@@ -74,8 +77,8 @@ def measure_main_frequency_zero_crossing(data: List[float], sampling_rate: float
     start = zero_crossings[0]
     end = zero_crossings[-1]
     # interpolate at what position the signal crosses the zero/avg
-    start = start - abs_interpolate(data[start] - signal_avg, data[start - 1] - signal_avg)
-    end = end - abs_interpolate(data[end] - signal_avg, data[end - 1] - signal_avg)
+    start = start - abs_interpolate(data_ac[start], data_ac[start - 1])
+    end   = end   - abs_interpolate(data_ac[end], data_ac[end - 1])
 
     half_wave_length_avg = (end - start) / (len(zero_crossings) - 1) / sampling_rate
     frequency = 1.0 / (2 * half_wave_length_avg)

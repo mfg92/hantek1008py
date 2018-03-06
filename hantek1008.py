@@ -207,6 +207,24 @@ class Hantek1008Raw:
         scale_factor_id: List[int] = [Hantek1008Raw._vertical_scale_factor_to_id(sf) for sf in scale_factors]
         self.__send_cmd(0xa2, parameter=scale_factor_id, sec_till_response_request=0.2132)
 
+    def __send_set_active_channels(self, active_channels: List[int] = list(range(0, 8))):
+        """
+        Activates only the channels thar are in the list
+        :param active_channels: a list of the channels that should be active
+        :return:
+        """
+        assert active_channels is not None
+        assert all(c in self.valid_channel_ids() for c in active_channels)
+        assert len(set(active_channels)) == len(active_channels), "One channel must nut be more than once in the list"
+
+        # set the count of active channels
+        self.__send_cmd(0xa0, parameter=[len(active_channels)])
+
+        active_channels_byte_map = [(0x01 if i in active_channels else 0x00)
+                                    for i in range(0, 8)]
+        # what channels should be active?
+        self.__send_cmd(0xaa, parameter=active_channels_byte_map)
+
     def init(self):
         self._init1()
         self._init2()
@@ -252,9 +270,10 @@ class Hantek1008Raw:
 
         self.__send_cmd(0xf5, sec_till_response_request=0.2132)
 
-        self.__send_cmd(0xa0, parameter=bytes.fromhex("08"))
-
-        self.__send_cmd(0xaa, parameter=bytes.fromhex("0101010101010101"))
+        # self.__send_cmd(0xa0, parameter=bytes.fromhex("08"))
+        # self.__send_cmd(0xaa, parameter=bytes.fromhex("0101010101010101"))
+        # activate all 8 channels
+        self.__send_set_active_channels()
 
         self.__send_set_time_div(500 * 1000)  # 500us, the default value in the windows software
 
@@ -266,7 +285,7 @@ class Hantek1008Raw:
         self.__send_cmd(0xac, parameter=bytes.fromhex("01f40009c50009c5"))
 
     def _init2(self):
-        """calibrate"""
+        """get zero offsets for all channels and vscales"""
         self._zero_offsets = {}
         for vscale_id in range(1, 4):
             vscale = Hantek1008Raw._vertical_scale_id_to_factor(vscale_id)
@@ -322,9 +341,13 @@ class Hantek1008Raw:
 
         self.__send_cmd(0xf3)
 
-        self.__send_cmd(0xa0, parameter=[0x08])
-
-        self.__send_cmd(0xaa, parameter=[0x01] * 8)
+        # # set the count of active channels
+        # self.__send_cmd(0xa0, parameter=[0x08])
+        #
+        # # what channels to activate?
+        # self.__send_cmd(0xaa, parameter=[0x01] * 8)
+        # activate all 8 channels
+        self.__send_set_active_channels()
 
         # self.send_cmd(0xa2, parameter=bytes.fromhex("0303030303030303"), sec_till_response_request=0.2132)
         self.__send_set_vertical_scale(self.__vertical_scale_factors)

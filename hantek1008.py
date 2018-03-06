@@ -189,12 +189,12 @@ class Hantek1008Raw:
         self.__send_cmd(0xa3, parameter=[time_per_div_id])
 
     @staticmethod
-    def _vertical_scale_id_to_factor(vs_id: int):
+    def _vertical_scale_id_to_factor(vs_id: int) -> float:
         assert 1 <= vs_id <= len(Hantek1008Raw.__VSCALE_FACTORS)
         return Hantek1008Raw.__VSCALE_FACTORS[vs_id - 1]
 
     @staticmethod
-    def _vertical_scale_factor_to_id(vs_factor: float):
+    def _vertical_scale_factor_to_id(vs_factor: float) -> int:
         assert vs_factor in Hantek1008Raw.__VSCALE_FACTORS
         return Hantek1008Raw.__VSCALE_FACTORS.index(vs_factor) + 1
 

@@ -224,18 +224,23 @@ def print_window_analysis(csv_writer: CsvWriter,
     Li_P, Li_Q, Li_S = 0, 0, 0
 
     for voltage_ch, ampere_ch, pair_name in voltamp_pairs:
-        voltage_data = per_channel_data[voltage_ch]
-        ampere_data = per_channel_data[ampere_ch]
+        voltage_data = per_channel_data[voltage_ch]  # the directly measured voltage, maybe has to be scaled
+        ampere_data = per_channel_data[ampere_ch]  # the directly measured voltage, has to be converted to ampere
+
+        # scale data
+        if voltage_scale_factor != 1:
+            voltage_data = [v * voltage_scale_factor for v in voltage_data]
+        if voltage_to_ampere_factor != 1:
+            ampere_data = [v * voltage_to_ampere_factor for v in ampere_data]
+
 
         voltage_avg_local_min, voltage_avg_local_max = analyse_channel_avg_local_min_max(voltage_data)
         voltage_avg_local_min *= voltage_scale_factor
         voltage_avg_local_max *= voltage_scale_factor
         voltage_avg = numpy.mean(voltage_data) * voltage_scale_factor
-        Lx_P, Lx_Q, Lx_S, Lx_phase_angle, Lx_voltage_rms, Lx_ampere_rms = analyse_pair_window(voltage_data,
-                                                                            ampere_data,
-                                                                            input_sampling_rate,
-                                                                            voltage_scale_factor,
-                                                                            voltage_to_ampere_factor)
+        Lx_P, Lx_Q, Lx_S, Lx_phase_angle, Lx_voltage_rms, Lx_ampere_rms =\
+            analyse_pair_window(voltage_data, ampere_data)
+
         Lx_mf_fft_max, Lx_mf_fft_parabolic, Lx_mf_fft_gaussian, Lx_mf_autocorrelate_parabolic, Lx_mf_zerocrossing =\
             analyse_channel_window(voltage_data, input_sampling_rate)
 
@@ -340,24 +345,14 @@ def analyse_channel_window(channel_values: List[float], input_sampling_rate: flo
     return main_frequency, mf_fft_parabolic, mf_fft_gaussian, mf_autocorrelate_parabolic, mf_zerocrossing
 
 
-def analyse_pair_window(voltage_channel_values: List[float], ampere_channel_values: List[float],
-                        input_sampling_rate: float,
-                        voltage_scale_factor: float,
-                        voltage_to_ampere_factor: float)\
+def analyse_pair_window(voltage_values: List[float], ampere_values: List[float])\
         -> (float, float, float, float, float, float):
-    voltage_channel_values_part = [v * voltage_scale_factor for v in voltage_channel_values]
-    ampere_channel_values_part = [v * voltage_to_ampere_factor for v in ampere_channel_values]
 
-    P, Q, S = electro.calc_power(voltage_channel_values_part, ampere_channel_values_part, input_sampling_rate)
+    P, Q, S = electro.calc_power(voltage_values, ampere_values)
     phase_angle = math.acos(P / S)
-    voltage_rms = electro.rms(voltage_channel_values_part)
-    ampere_rms = electro.rms(ampere_channel_values_part)
+    voltage_rms = electro.rms(voltage_values)
+    ampere_rms = electro.rms(ampere_values)
     return P, Q, S, phase_angle, voltage_rms, ampere_rms
-
-    # print_column("power (P/Q/S)", f"{P:.4f} W / {Q:.4f} var / {S:.4f} VA")
-    # print_column("\->phase angle φ", f"{phase_angle:.4f}°")
-    # print_column("voltage rms", f"{volatge_rms:0.4f} V")
-    # print_column("ampere rms", f"{ampere_rms:0.4f} A")
 
 
 def analyse_channel_avg_local_min_max(channel_values: List[float]) -> (float, float):

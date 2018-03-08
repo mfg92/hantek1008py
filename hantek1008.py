@@ -246,27 +246,27 @@ class Hantek1008Raw:
 
         response = self.__send_cmd(0xb5, response_length=64, echo_expected=False,
                                    sec_till_response_request=0.0193)  # 181
-        assert response == bytes.fromhex("00080008000800080008000800080008d407c907ef07cd07df07eb07c707d707"
-                                        "e107d207f007d807e607ed07d507e207f607e007f007e907f007ef07ea07f207")
+        # assert response == bytes.fromhex("00080008000800080008000800080008d407c907ef07cd07df07eb07c707d707"
+        #                                 "e107d207f007d807e607ed07d507e207f607e007f007e907f007ef07ea07f207")
 
         response = self.__send_cmd(0xb6, response_length=64, echo_expected=False)  # 182
-        assert response == bytes.fromhex("04040404040404040404040404040404d200d500d800d400d400d500d200d200"
-                                        "9c009f009f009d009d009d009e009d00fd01fc01fc01fc01fb01fa01fd01fc01")
+        # assert response == bytes.fromhex("04040404040404040404040404040404d200d500d800d400d400d500d200d200"
+        #                                 "9c009f009f009d009d009d009e009d00fd01fc01fc01fc01fb01fa01fd01fc01")
 
         response = self.__send_cmd(0xe5, response_length=2, echo_expected=False)
-        assert response == bytes.fromhex("d6 06")
+        # assert response == bytes.fromhex("d6 06")
 
         response = self.__send_cmd(0xf7, response_length=64, echo_expected=False)
-        assert response == bytes.fromhex("2cfd8ffb54fa2ef878007a007b00780079007a0079007800b801bf01c301ba01"
-                                        "bb01be01b701b801f90203030803fb02fc020003f502f80294ff92ff8fff93ff")
+        # assert response == bytes.fromhex("2cfd8ffb54fa2ef878007a007b00780079007a0079007800b801bf01c301ba01"
+        #                                 "bb01be01b701b801f90203030803fb02fc020003f502f80294ff92ff8fff93ff")
 
         response = self.__send_cmd(0xf8, response_length=64, echo_expected=False)
-        assert response == bytes.fromhex("92ff91ff96ff94ffc9fec4febdfec8fec7fec2fecffec9fe4cfe45fe3afe4afe"
-                                        "48fe42fe54fe4dfe70ff70ff71ff70ff71ff71ff72ff71ff7efe7bfe7afe7efe")
+        # assert response == bytes.fromhex("92ff91ff96ff94ffc9fec4febdfec8fec7fec2fecffec9fe4cfe45fe3afe4afe"
+        #                                 "48fe42fe54fe4dfe70ff70ff71ff70ff71ff71ff72ff71ff7efe7bfe7afe7efe")
 
         response = self.__send_cmd(0xfa, response_length=56, echo_expected=False)
-        assert response == bytes.fromhex("7dfe7efe80fe7ffe90019401930192018f01900191018f0195029b0299029802"
-                                        "930294029702940290fd89fd84fd90fd8dfd8cfd94fd91fd")
+        # assert response == bytes.fromhex("7dfe7efe80fe7ffe90019401930192018f01900191018f0195029b0299029802"
+        #                                 "930294029702940290fd89fd84fd90fd8dfd8cfd94fd91fd")
 
         self.__send_cmd(0xf5, sec_till_response_request=0.2132)
 

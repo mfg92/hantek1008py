@@ -109,15 +109,6 @@ def measure_main_frequency_autocorrelate(samples: List[float], sampling_rate: fl
     auto = np.correlate(samples, samples, mode="full")
     auto = auto[round(len(auto) / 2):]
 
-    # auto_change = [auto[i+1] - auto[i] for i in range(0, len(auto)-1)]
-
-    # import matplotlib.pyplot as plt
-    # f, axarr = plt.subplots(2, sharex=True)
-    # axarr[0].plot(samples)
-    # axarr[1].plot(auto)
-    # axarr[1].grid(True)
-    # plt.show()
-
     def find_local_peak(data: List[float], from_pos: int):
         for i in range(from_pos+1, len(data)-1):
             l, m, r = data[i-1:i+2]
@@ -132,12 +123,6 @@ def measure_main_frequency_autocorrelate(samples: List[float], sampling_rate: fl
     if second_max_index is None:
         return -1
     return sampling_rate / interpolate(auto, second_max_index, mode)
-
-    # funktioniert nur wenn hauptfrequenz ausreichend domninat ist
-    # sonst werden unter umständen andere periodische signale gemessen:
-    # first_min_index = np.argmin(auto)
-    # second_max_index = first_min_index + np.argmax(auto[first_min_index:])
-    # return sampling_rate / interpolate(auto, second_max_index, mode)
 
 
 # for phase angles between 0 and 180 degrees
@@ -168,29 +153,15 @@ def measure_offset_fft(samples_a: List[float],
 def calc_power(voltage_data: List[float],
                ampere_data: List[float]):
     assert len(voltage_data) == len(ampere_data) > 0
-
-    # P = 0  # active power/real power (Wirkleistung)
-    # Q = 0  # reactive power (blindleistung)
+    # P = 0  # active power/real power      (Wirkleistung)
+    # Q = 0  # reactive power               (Blindleistung)
     # S = 0  # complex power/apparent power (Scheinleistung)
-    # S = math.sqrt(Q**2 + P**2)  # apparent power
-    # return S, P, Q
 
     # https://electronics.stackexchange.com/questions/199395/how-to-calculate-instantaneous-active-power-from-sampled-values-of-voltage-and-c/199401#199401
     instantaneous_power = [v*a for v, a in zip(voltage_data, ampere_data)]
 
     P = np.mean(instantaneous_power)
     S = rms(voltage_data) * rms(ampere_data)
-
     Q = sqrt(S**2 - P**2)
     # power_factor = P / S
     return P, Q, S
-
-# voltage_frequency = measure_main_frequency_autocorrelate(voltage_data, sampling_rate)
-# offset = measure_offset_correlate(voltage_data, ampere_data, sampling_rate)
-# offset %= 1/voltage_frequency
-#
-# print(f"offset(xcor): {offset*1000:6.2f} ms / {360 * offset/(1/voltage_frequency):8.3f} °")
-# print(f"offset(sign): {'-':^6} ms / {measure_offset_signum(voltage_data, ampere_data):8.3f} °")
-# print(f"offset(fft2): {'-':^6} ms / {measure_offset_fft(voltage_data, ampere_data):8.3f}°")
-# # S_avg = sum(u * (i * ampere_factor) for u, i in zip(voltage_data, ampere_data)) / len(voltage_data)
-# # return S_avg

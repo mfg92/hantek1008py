@@ -27,6 +27,7 @@ def main(csv_file_path: str,
          zero_offset_shift_compensation_function_time_offset_sec: int=0,
          raw_or_volt: str="volt",
          sampling_rate: float=440,
+         timestamp_style: str="own_row",
          do_sampling_rate_measure: bool=True) -> None:
 
     if selected_channels is None or len(selected_channels) == 0:
@@ -59,6 +60,9 @@ def main(csv_file_path: str,
         vertical_scale_factor = [1.0 if i not in selected_channels
                                  else vertical_scale_factor[selected_channels.index(i)]
                                  for i in range(8)]
+
+    timestamp_style = timestamp_style.lower()
+    assert timestamp_style in ["first_column", "own_row"]
 
     correction_data: CorrectionDataType = [{} for _ in range(8)]  # list of dicts of dicts
     # use case: correction_data[channel_id][vscale][units] = correction_factor
@@ -127,7 +131,7 @@ def main(csv_file_path: str,
     for i in range(1, 100):
         try:
             sample(device, raw_or_volt, selected_channels, sampling_rate, vertical_scale_factor,
-                   csv_file_path, measured_sampling_rate)
+                   csv_file_path, timestamp_style, measured_sampling_rate)
             # no error? -> finished by user interaction
             break
         except USBError as usb_error:
@@ -188,7 +192,7 @@ def connect(vertical_scale_factor: Union[float, List[float]] = 1.0,
 
 
 def sample(device: Hantek1008, raw_or_volt: str, selected_channels: List[int], sampling_rate:float,
-           vertical_scale_factor: List[float], csv_file_path: str,
+           vertical_scale_factor: List[float], csv_file_path: str, timestamp_style: str,
            measured_sampling_rate: float = None):
     log.info(f"Processing data of channel{'' if len(selected_channels) == 1 else 's'}:"
              f" {' '.join([str(i+1) for i in selected_channels])}")
@@ -219,6 +223,8 @@ def sample(device: Hantek1008, raw_or_volt: str, selected_channels: List[int], s
 
         # channel >= 8 are the raw values of the corresponding channels < 8
         channel_titles = [f'ch_{i+1 if i < 8 else (str(i+1-8)+"_raw")}' for i in selected_channels]
+        if timestamp_style == "first_column":
+            channel_titles = ["time"] + channel_titles
         csv_writer.write_comment(f"{', '.join(channel_titles)}")
 
         csv_writer.write_comment(f"samplingrate: {sampling_rate} Hz")
@@ -238,14 +244,27 @@ def sample(device: Hantek1008, raw_or_volt: str, selected_channels: List[int], s
         milli_volt_int_representation = False
 
         if roll_mode:
-            for channel_data in device.request_samples_roll_mode(mode=raw_or_volt, sampling_rate=sampling_rate):
-                channel_data = [channel_data[ch] for ch in selected_channels]
+            last_timestamp = datetime.datetime.now().timestamp()
+            for per_channel_data in device.request_samples_roll_mode(mode=raw_or_volt, sampling_rate=sampling_rate):
+                now_timestamp = datetime.datetime.now().timestamp()
+                # per_channel_data contains a list of values per channel
+                per_channel_data = [per_channel_data[ch] for ch in selected_channels]
                 if milli_volt_int_representation:
-                    channel_data = [[f"{round(value*1000)}" for value in single_channel]
-                                    for single_channel in channel_data]
-                csv_writer.write_rows(zip(*channel_data))
-                # timestamps are by nature UTC
-                csv_writer.write_comment(f"UNIX-Time: {datetime.datetime.now().timestamp()}")
+                    per_channel_data = [[f"{round(value*1000)}" for value in single_channel]
+                                    for single_channel in per_channel_data]
+
+                if timestamp_style == "first_column":
+                    values_per_channel_count = len(per_channel_data[0])
+                    deltatime_per_value = (now_timestamp-last_timestamp)/values_per_channel_count
+                    timestamps_interpolated = [last_timestamp + i*deltatime_per_value
+                                               for i in range(values_per_channel_count)]
+                    csv_writer.write_rows(zip(timestamps_interpolated, *per_channel_data))
+                else:  # timestamp_style == "own_row":
+                    csv_writer.write_rows(zip(*per_channel_data))
+                    # timestamps are by nature UTC
+                    csv_writer.write_comment(f"UNIX-Time: {now_timestamp}")
+
+                last_timestamp = now_timestamp
         else:
             while True:
                 channel_data2, channel_data3 = device.request_samples_burst_mode()
@@ -436,6 +455,14 @@ Collect data from device 'Hantek 1008'. Usage examples:
                         default=False, const=True,
                         help='Measure the exact samplingrate the device achieves by using the computer internal clock.'
                              'Increases startup duration by ~10 sec')
+    parser.add_argument('-t', '--timestampstyle', dest="timestamp_style",
+                        type=str, default="own_row", nargs='?', choices=["own_row", "first_column"],
+                        help="Specifies the style the timestamps of the values are included in the CSV output. There"
+                             " are two options: When the 'own_row' style is used, every time the device sends a bunch"
+                             " of measured samples, these are writen to the CSV output followed by one row with the"
+                             " timestamp."
+                             " Use the 'first_column' option to let the first column have interpolated timestamps."
+                             " Default is 'own_row'.")
 
     args = parser.parse_args()
 
@@ -498,4 +525,5 @@ Collect data from device 'Hantek 1008'. Usage examples:
          if args.zos_compensation is not None and len(args.zos_compensation) == 2
          else 0,
          sampling_rate=args.sampling_rate,
+         timestamp_style=args.timestamp_style,
          do_sampling_rate_measure=args.do_sampling_rate_measure)

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from hantek1008 import Hantek1008, CorrectionDataType, ZeroOffsetShiftCompensationFunctionType
-from typing import Union, Optional, List, Dict, Tuple, Callable, Generator, Any
+from typing import Union, Optional, List, Dict, Any, IO
 import logging as log
 import argparse
 import time
@@ -136,7 +136,7 @@ def main(csv_file_path: str,
             break
         except USBError as usb_error:
             # usb error bug occurred? try to close the device or reset it, sleep a sec and restart
-            log.error(usb_error)
+            log.error(str(usb_error))
             try:
                 device.close()
             except:
@@ -204,7 +204,7 @@ def sample(device: Hantek1008, raw_or_volt: str, selected_channels: List[int], s
         # output_csv_filename = "channel_data.csv"
         if csv_file_path == '-':
             log.info("Exporting data to stdout...")
-            csv_file = sys.stdout
+            csv_file: IO[str] = sys.stdout
         elif csv_file_path.endswith(".xz"):
             log.info(f"Exporting data lzma-compressed to file '{csv_file_path}'...")
             csv_file = lzma.open(csv_file_path, 'at', newline='')

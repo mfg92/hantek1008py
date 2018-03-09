@@ -771,9 +771,9 @@ class Hantek1008(Hantek1008Raw):
     @overrides
     def request_samples_burst_mode(self, mode: str = "volt") \
             -> Union[
-               Tuple[List[List[int]], List[List[int]]],
-               Tuple[List[List[float]], List[List[float]]],
-               Tuple[List[Union[List[float], List[int]]], List[Union[List[float], List[int]]]],
+               Tuple[List[List[int]], List[List[int]]],  # mode == raw
+               Tuple[List[List[float]], List[List[float]]],  # mode == volt
+               Tuple[List[Union[List[float], List[int]]], List[Union[List[float], List[int]]]],  # mode == volt+raw
                ]:
         assert mode in ["raw", "volt", "volt+raw"]
         assert self.__zero_offset_shift_compensation_channel is None, \

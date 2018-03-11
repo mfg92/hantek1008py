@@ -49,16 +49,23 @@ class Hantek1008Raw:
          1.0/16: 0x24}
 
     def __init__(self, ns_per_div: int = 500_000,
-                 vertical_scale_factor: Union[float, List[float]] = 1.0) -> None:
+                 vertical_scale_factor: Union[float, List[float]] = 1.0,
+                 active_channels: Optional[List[int]] = None) -> None:
         """
         :param ns_per_div:
         :param vertical_scale_factor: must be an array of length 8 with a float scale value for each channel.
         Or a single float, than all channel will have that scale factor. The float must be 1.0, 0.2 or 0.02.
+        :param active_channels: a list of channel that will be used
         """
 
-        assert isinstance(vertical_scale_factor, float) or len(vertical_scale_factor) == Hantek1008Raw.channel_count()
+        assert isinstance(vertical_scale_factor, float) \
+               or len(vertical_scale_factor) == Hantek1008Raw.channel_count()
 
         self.__ns_per_div: int = ns_per_div  # on value for all channels
+
+        self.__active_channels: List[int] = copy.deepcopy(active_channels) if active_channels is not None\
+            else Hantek1008Raw.valid_channel_ids()
+        self.__active_channels = sorted(self.__active_channels)  # some methods depend of ascending order of this
 
         # one vertical scale factor (float) per channel
         self.__vertical_scale_factors: List[float] = [vertical_scale_factor] * Hantek1008Raw.channel_count() \
@@ -214,6 +221,7 @@ class Hantek1008Raw:
         :return:
         """
         assert active_channels is not None
+        assert len(active_channels) > 0
         assert all(c in self.valid_channel_ids() for c in active_channels)
         assert len(set(active_channels)) == len(active_channels), "One channel must nut be more than once in the list"
 
@@ -346,8 +354,11 @@ class Hantek1008Raw:
         #
         # # what channels to activate?
         # self.__send_cmd(0xaa, parameter=[0x01] * 8)
+
         # activate all 8 channels
-        self.__send_set_active_channels()
+        # self.__send_set_active_channels()
+
+        self.__send_set_active_channels(self.__active_channels)
 
         # self.send_cmd(0xa2, parameter=bytes.fromhex("0303030303030303"), sec_till_response_request=0.2132)
         self.__send_set_vertical_scale(self.__vertical_scale_factors)
@@ -370,6 +381,8 @@ class Hantek1008Raw:
 
     def request_samples_burst_mode(self) -> Tuple[List[List[int]], List[List[int]]]:
         """get the data"""
+        # TODO Support other values than 8 active channels in burst mode
+        assert len(self.__active_channels) == 8, "Currently only all channel active is supported in burst mode"
 
         self.__send_cmd(0xf3)
 
@@ -413,14 +426,26 @@ class Hantek1008Raw:
     def valid_vscale_factors() -> List[float]:
         return copy.deepcopy(Hantek1008Raw.__VSCALE_FACTORS)
 
+    @staticmethod
+    def actual_sampling_rate_factor(active_channel_count: int) -> List[float]:
+        """
+        If not all channels are used the actual sampling rate is higher than the
+        given sampling rate. The factor describe how much higher it is, depending on the amount
+        of active channels.
+        :return:
+        """
+        assert 1 <= active_channel_count <= Hantek1008Raw.channel_count()
+        return [4.56, 3.03, 2.27, 1.82, 1.51, 1.3, 1.14, 1.00][active_channel_count-1]
+
     def request_samples_roll_mode_single_row(self, **argv) \
-            -> Generator[List[int], None, None]:
+            -> Generator[Dict[int, int], None, None]:
         for channel_data in self.request_samples_roll_mode(**argv):
+            # TODO
             for v in zip(*channel_data):
                 yield v
 
     def request_samples_roll_mode(self, sampling_rate: int = 440) \
-            -> Generator[List[List[int]], None, None]:
+            -> Generator[Dict[int, List[int]], None, None]:
 
         assert sampling_rate in Hantek1008Raw.valid_roll_sampling_rates(), \
             f"sample_rate must be in {Hantek1008Raw.valid_roll_sampling_rates()}"
@@ -445,9 +470,10 @@ class Hantek1008Raw:
                     self.__send_cmd(0xf3)
 
                     response = self.__send_cmd(0xc7, response_length=2, echo_expected=False)
-                    # ready_data_length = response[0] * 256 + response[1]
                     ready_data_length = int.from_bytes(response, byteorder="big", signed=False)
-                    assert ready_data_length % 9 == 0
+                    # ready_data_length =
+                    #  (active_channels + ONE_MYSTIC_EXTRA_CHANNEL) * TWO_BYTES_PER_SAMPLE * row_count
+                    assert ready_data_length % ((len(self.__active_channels) + 1)*2) == 0
 
                 sample_response = b''
                 while ready_data_length > 0:
@@ -462,7 +488,9 @@ class Hantek1008Raw:
 
                 # in rolling mode there is an additional 9th channel, with values around 1742
                 # this channel will not be past to the caller
-                yield Hantek1008Raw.__to_per_channel_lists(Hantek1008Raw.__from_bytes_to_shorts(sample_response), 9)[:8]
+                sample_shorts = Hantek1008Raw.__from_bytes_to_shorts(sample_response)
+                per_channel_data = Hantek1008Raw.__to_per_channel_lists(sample_shorts,  len(self.__active_channels) + 1)
+                yield per_channel_data[:(len(self.__active_channels))]
         except GeneratorExit:
             # TODO: auto start pause tread?
             pass
@@ -584,23 +612,29 @@ class Hantek1008Raw:
         assert channel_id in Hantek1008Raw.valid_channel_ids()
         return self.__vertical_scale_factors[channel_id]
 
+    def get_active_channels(self) -> List[int]:
+        return copy.deepcopy(self.__active_channels)
+
     @staticmethod
     def __from_bytes_to_shorts(data: bytes) -> List[int]:
         """Take two following bytes to build a integer (using little endianess) """
         assert len(data) % 2 == 0
         return [data[i] + data[i + 1] * 256 for i in range(0, len(data), 2)]
 
-    @staticmethod
-    def __to_per_channel_lists(shorts: List[int], channel_count: int = 8) -> List[List[int]]:
-        """Create a list (of the size of 'channel_count') of lists,
-        where the list at position x contains the data for channel x+1 of the hantek device """
-        return [shorts[i::channel_count] for i in range(0, channel_count)]
+    def __to_per_channel_lists(self, shorts: List[int]) -> Dict[List[int]]:
+        """Create a dictionary (of the size of 'channel_count') of lists,
+        where the list at key x contains the data for channel x+1 of the hantek device """
+        channel_count = len(self.__active_channels)
+        return {self.__active_channels[i]: shorts[i::channel_count]
+                for i in range(0, channel_count)}
 
 
 """
 Below goes stuff that is needed for more advanced features
 """
 
+# list of dicts of lists of dicts
+# usecase: __correction_data[channel_id][vscale][..] = {"units":..., "factor": ...}
 CorrectionDataType = List[Dict[float, Dict[float, float]]]
 
 # a function that awaits an channel id [0,7], vscale and a deltatime (time in sec since creation of this class)
@@ -616,25 +650,29 @@ class Hantek1008(Hantek1008Raw):
 
     def __init__(self, ns_per_div: int = 500_000,
                  vertical_scale_factor: Union[float, List[float]] = 1.0,
+                 active_channels: Optional[List[int]] = None,
                  correction_data: Optional[CorrectionDataType] = None,
                  zero_offset_shift_compensation_channel: Optional[int] = None,
                  zero_offset_shift_compensation_function: Optional[ZeroOffsetShiftCompensationFunctionType] = None,
                  zero_offset_shift_compensation_function_time_offset_sec: Optional[int] = 0) -> None:
 
-        Hantek1008Raw.__init__(self, ns_per_div, vertical_scale_factor)
-
+        if active_channels is None:
+            active_channels = Hantek1008Raw.valid_channel_ids()
         if correction_data is None:
             correction_data = [{} for _ in range(Hantek1008Raw.channel_count())]
 
         assert len(correction_data) == Hantek1008Raw.channel_count()
         assert all(isinstance(x, dict) for x in correction_data)
 
-        assert zero_offset_shift_compensation_channel is None \
-               or zero_offset_shift_compensation_channel in Hantek1008Raw.valid_channel_ids()
         assert zero_offset_shift_compensation_channel is None or zero_offset_shift_compensation_function is None
+        if zero_offset_shift_compensation_channel is not None:
+            assert zero_offset_shift_compensation_channel not in active_channels
+            assert zero_offset_shift_compensation_channel in Hantek1008Raw.valid_channel_ids()
+            assert zero_offset_shift_compensation_channel not in active_channels
+            active_channels = [active_channels] + [zero_offset_shift_compensation_channel]
 
-        # list of dicts of lists of dicts
-        # usecase: __correction_data[channel_id][vscale][..] = {"units":..., "factor": ...}
+        Hantek1008Raw.__init__(self, ns_per_div, vertical_scale_factor, active_channels)
+
         self.__correction_data: CorrectionDataType = copy.deepcopy(correction_data)
 
         self.__zero_offset_shift_compensation_channel: Optional[int] = zero_offset_shift_compensation_channel
@@ -693,9 +731,11 @@ class Hantek1008(Hantek1008Raw):
             -> Generator[List[Union[List[float], List[int]]], None, None]:
 
         assert mode in ["volt", "raw", "volt+raw"]
+        active_channel_count = len(Hantek1008Raw.get_active_channels(self))
 
         for raw_per_channel_list in Hantek1008Raw.request_samples_roll_mode(self, sampling_rate):
-            assert len(raw_per_channel_list) == 8
+            # assert len(raw_per_channel_list) == 8
+            assert len(raw_per_channel_list) == active_channel_count
             assert isinstance(raw_per_channel_list[0], list)
             result: List[Union[List[float], List[int]]] = []
             if "volt" in mode:
@@ -775,6 +815,8 @@ class Hantek1008(Hantek1008Raw):
                Tuple[List[List[float]], List[List[float]]],  # mode == volt
                Tuple[List[Union[List[float], List[int]]], List[Union[List[float], List[int]]]],  # mode == volt+raw
                ]:
+        # TODO Support other values than 8 active channels in burst mode
+
         assert mode in ["raw", "volt", "volt+raw"]
         assert self.__zero_offset_shift_compensation_channel is None, \
             "zero offset shift compensation is not implemented for burst mode"

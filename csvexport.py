@@ -110,7 +110,7 @@ def main(csv_file_path: str,
         if len(channels_without_cd) > 0:
             log.warning(f"There is no calibration data for channel(s): {channels_without_cd}")
 
-    device = connect(vertical_scale_factor, correction_data, zero_offset_shift_compensation_channel,
+    device = connect(vertical_scale_factor, selected_channels, correction_data, zero_offset_shift_compensation_channel,
                      zero_offset_shift_compensation_function, zero_offset_shift_compensation_function_time_offset_sec)
 
     if calibrate_output_file_path:
@@ -124,6 +124,8 @@ def main(csv_file_path: str,
         log.info(f"Measure sample rate of device (takes about {measurment_duration} sec) ...")
         measured_sampling_rate = measure_sampling_rate(device, sampling_rate, measurment_duration)
         log.info(f"-> {measured_sampling_rate:.4f} Hz")
+        # TODO Remove
+        # sys.exit()
 
     csv_file_path_zero = csv_file_path
 
@@ -146,7 +148,8 @@ def main(csv_file_path: str,
                 except:
                     pass
             sleep(1.0)
-            device = connect(vertical_scale_factor, correction_data, zero_offset_shift_compensation_channel,
+            device = connect(vertical_scale_factor, selected_channels, correction_data,
+                             zero_offset_shift_compensation_channel,
                              zero_offset_shift_compensation_function,
                              zero_offset_shift_compensation_function_time_offset_sec)
             if csv_file_path_zero != '-':
@@ -156,12 +159,14 @@ def main(csv_file_path: str,
     device.close()
 
 
-def connect(vertical_scale_factor: Union[float, List[float]] = 1.0,
+def connect(vertical_scale_factor: Union[float, List[float]],
+            selected_channels: List[int],
             correction_data: Optional[CorrectionDataType] = None,
             zero_offset_shift_compensation_channel: Optional[int] = None,
             zero_offset_shift_compensation_function: Optional[ZeroOffsetShiftCompensationFunctionType] = None,
             zero_offset_shift_compensation_function_time_offset_sec: Optional[int] = 0):
     device = Hantek1008(vertical_scale_factor=vertical_scale_factor,
+                        active_channels=selected_channels,
                         correction_data=correction_data,
                         zero_offset_shift_compensation_channel=zero_offset_shift_compensation_channel,
                         zero_offset_shift_compensation_function=zero_offset_shift_compensation_function,
@@ -197,10 +202,16 @@ def sample(device: Hantek1008, raw_or_volt: str, selected_channels: List[int], s
     log.info(f"Processing data of channel{'' if len(selected_channels) == 1 else 's'}:"
              f" {' '.join([str(i+1) for i in selected_channels])}")
 
+    computed_actual_sampling_rate = Hantek1008.actual_sampling_rate_factor(len(selected_channels))
+    log.warning(f"When not using all 8 channels, the actual sampling rate ({computed_actual_sampling_rate:.2f}) is "
+                f"higher than the given sampling_rate ({sampling_rate})! "
+                f"Best is to use the --measuresamplingrate flag.")
+
     if raw_or_volt == "volt+raw":  # add the coresponding raw values to the selected channel list
-        selected_channels += [sc + 8 for sc in selected_channels]
+        selected_channels += [sc + Hantek1008.channel_count() for sc in selected_channels]
 
     try:
+        # csv_file:  IO[str] = None
         # output_csv_filename = "channel_data.csv"
         if csv_file_path == '-':
             log.info("Exporting data to stdout...")
@@ -227,7 +238,8 @@ def sample(device: Hantek1008, raw_or_volt: str, selected_channels: List[int], s
             channel_titles = ["time"] + channel_titles
         csv_writer.write_comment(f"{', '.join(channel_titles)}")
 
-        csv_writer.write_comment(f"samplingrate: {sampling_rate} Hz")
+        csv_writer.write_comment(f"intended samplingrate: {sampling_rate} Hz")
+        csv_writer.write_comment(f"samplingrate: {computed_actual_sampling_rate} Hz")
         if measured_sampling_rate:
             csv_writer.write_comment(f"measured samplingrate: {measured_sampling_rate} Hz")
 
@@ -239,6 +251,7 @@ def sample(device: Hantek1008, raw_or_volt: str, selected_channels: List[int], s
         csv_writer.write_comment(f"zosc-method: {device.get_used_zero_offsets_shift_compensation_method()}")
 
         csv_writer.write_comment(f"DATA")
+
         # TODO: make these configurable
         roll_mode = True
         milli_volt_int_representation = False
@@ -247,11 +260,18 @@ def sample(device: Hantek1008, raw_or_volt: str, selected_channels: List[int], s
             last_timestamp = datetime.datetime.now().timestamp()
             for per_channel_data in device.request_samples_roll_mode(mode=raw_or_volt, sampling_rate=sampling_rate):
                 now_timestamp = datetime.datetime.now().timestamp()
-                # per_channel_data contains a list of values per channel
-                per_channel_data = [per_channel_data[ch] for ch in selected_channels]
+
+                def get_data_of_ch(ch: int):
+                    index = sorted(selected_channels).index(ch)
+                    # per_channel_data contains lists of values per channel, channels sorted ascending
+                    return per_channel_data[index]
+
+                # after this, channels are sorted the same way as in selected_channels
+                per_channel_data = [get_data_of_ch(ch) for ch in selected_channels]
+
                 if milli_volt_int_representation:
                     per_channel_data = [[f"{round(value*1000)}" for value in single_channel]
-                                    for single_channel in per_channel_data]
+                                        for single_channel in per_channel_data]
 
                 if timestamp_style == "first_column":
                     values_per_channel_count = len(per_channel_data[0])
@@ -265,7 +285,11 @@ def sample(device: Hantek1008, raw_or_volt: str, selected_channels: List[int], s
                     csv_writer.write_comment(f"UNIX-Time: {now_timestamp}")
 
                 last_timestamp = now_timestamp
-        else:
+        else:  # burst mode
+            # TODO currently not supported
+            # TODO missing features:
+            # * timestamp_style
+            # * change arrangement of channels if selected_channels is nor sorted
             while True:
                 channel_data2, channel_data3 = device.request_samples_burst_mode()
 
@@ -289,11 +313,11 @@ def measure_sampling_rate(device: Hantek1008, used_sampling_rate: float, measurm
     required_samples = max(4, int(math.ceil(measurment_duration * used_sampling_rate)))
     counter = -1
     start_time: float = 0
-    for data in device.request_samples_roll_mode(sampling_rate=used_sampling_rate):
+    for per_channel_data in device.request_samples_roll_mode(sampling_rate=used_sampling_rate):
         if counter == -1:  # skip first samples to ignore the duration of initialisation
             start_time = time.perf_counter()
             counter = 0
-        counter += len(data[0])
+        counter += len(per_channel_data[0])
         if counter >= required_samples:
             break
 
@@ -450,7 +474,12 @@ Collect data from device 'Hantek 1008'. Usage examples:
                         """)
     parser.add_argument('-f', '--samplingrate', dest='sampling_rate',
                         type=float, default=440, choices=Hantek1008.valid_roll_sampling_rates(),
-                        help='Set the sampling rate (in Hz) the device should use (default:440)')
+                        help='Set the sampling rate (in Hz) the device should use (default:440). If not all channels '
+                             'are used the actual sampling rate is higher. The factors are: '
+                             f'{[Hantek1008.actual_sampling_rate_factor(ch) for ch in  range(1, 9)]}. '
+                             'E.g. if only two channels are used the actual sampling rate is 3.03 higher '
+                             'than the given value. A free channel that is used for the zos-compensation will reduce '
+                             'the actual sampling the same way as if the channel is normally used.')
     parser.add_argument('-m', '--measuresamplingrate', dest='do_sampling_rate_measure', action="store_const",
                         default=False, const=True,
                         help='Measure the exact samplingrate the device achieves by using the computer internal clock.'

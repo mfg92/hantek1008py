@@ -82,6 +82,10 @@ def measure_main_frequency_zero_crossing(data: List[float], sampling_rate: float
 
     half_wave_length_avg = (end - start) / (len(zero_crossings) - 1) / sampling_rate
     frequency = 1.0 / (2 * half_wave_length_avg)
+
+    # delta = (end - start) * (1.0 / sampling_rate)
+    # periods = (len(zero_crossings) - 1) / 2
+    # frequency = 1.0 / (delta / periods)
     if not calc_offset:
         return frequency
     offset = 0
@@ -166,3 +170,81 @@ def calc_power(voltage_data: List[float],
     Q = sqrt(S**2 - P**2)
     # power_factor = P / S
     return P, Q, S
+
+
+# TODO name is not adequate
+# WARNING: Experimental
+def measure_main_frequencies_fft(samples: List[float],
+                                 sampling_rate: float,
+                                 freqeuency_search_count: int = 9,
+                                 frqeuency_distinction_range: float = 2,  # in Hz
+                                 mode: str = "parabolic")\
+        -> List[Tuple[float, float]]:
+    fourier = np.fft.rfft(samples * np.blackman(len(samples)))
+    # blackman is better for main frequency estimation using parabolic or Gaussian interpolation
+    # according to FFT_resol_note.pdf (IMPROVING FFT FREQUENCY MEASUREMENT RESOLUTION BY PARABOLIC
+    # AND GAUSSIAN INTERPOLATION)
+
+    fourier_amplitude = np.absolute(fourier)
+    fourier_frequency = np.fft.rfftfreq(n=len(samples), d=1.0 / sampling_rate)
+    fourier_frequency_step_width = fourier_frequency[1]
+
+    # import matplotlib.pyplot as plt
+    # plt.plot(fourier_frequency, fourier_amplitude)
+    # plt.grid()
+    # plt.show()
+
+    frequencies = []
+    for harmonic_count in range(freqeuency_search_count):
+        # get the highest value (+ index of that)
+        max_index, max_value = max(enumerate(fourier_amplitude), key=lambda v: v[1])
+        max_index_interpolated = interpolate(fourier_amplitude, max_index, mode)
+        max_value_interpolated = max_value  # TODO interpolate
+        frequencies.append((max_index_interpolated * fourier_frequency_step_width, max_value_interpolated))
+
+        # "remove" that frequency from the FFT
+        half_fdr_as_index_size = (frqeuency_distinction_range/fourier_frequency_step_width)/2
+        frequency_range_left = max(0, int(max_index_interpolated - half_fdr_as_index_size))
+        frequency_range_right = min(len(fourier_amplitude)-1, int(max_index_interpolated + half_fdr_as_index_size))
+        fourier_amplitude[frequency_range_left:frequency_range_right] = [0] * (frequency_range_right - frequency_range_left)
+        print("fft step width", fourier_frequency_step_width)
+        print("frequency_range_left", frequency_range_left)
+        print("frequency_range_right", frequency_range_right)
+
+    return frequencies
+
+# TODO name is not adequate
+# WARNING: Experimental
+# def measure_harmonics_fft(samples: List[float], sampling_rate: float,
+#                           harmonics_search_count: int = 9, mode: str = "parabolic")\
+#         -> List[Tuple[float, float]]:
+#     fourier = np.fft.rfft(samples * np.blackman(len(samples)))
+#     # blackman is better for main frequency estimation using parabolic or Gaussian interpolation
+#     # according to FFT_resol_note.pdf (IMPROVING FFT FREQUENCY MEASUREMENT RESOLUTION BY PARABOLIC
+#     # AND GAUSSIAN INTERPOLATION)
+#
+#     fourier_amplitude = np.absolute(fourier)
+#     fourier_frequency = np.fft.rfftfreq(n=len(samples), d=1.0 / sampling_rate)
+#     fourier_frequency_step_width = fourier_frequency[1]
+#
+#     import matplotlib.pyplot as plt
+#     plt.plot(fourier_frequency, fourier_amplitude)
+#     plt.grid()
+#     plt.show()
+#
+#     harmonics = []
+#     index_of_harmonic_0 = 0
+#     previous_max_index = 0
+#     for harmonic_count in range(harmonics_search_count):
+#         # get the highest value (+ index of that)
+#         search_start_index = index_of_harmonic_0 * harmonic_count
+#         max_index, max_value = max(enumerate(fourier_amplitude[search_start_index:]), key=lambda v: v[1])
+#         max_index_interpolated = interpolate(fourier_amplitude, max_index, mode)
+#         max_value_interpolated = max_value  # TODO interpolate
+#         harmonics.append(max_index_interpolated * fourier_frequency_step_width, max_value_interpolated)
+#         previous_max_index = max_index
+#         if index_of_harmonic_0 == 0:
+#             index_of_harmonic_0 = max_index_interpolated
+#
+#     return harmonics
+

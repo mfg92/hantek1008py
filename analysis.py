@@ -223,6 +223,11 @@ def print_window_analysis(csv_writer: CsvWriter,
     time_str = f"{time:.3f}"
     Li_P, Li_Q, Li_S = 0, 0, 0
 
+    # TODO: for test, simple compute average of window per channel
+    # window_avg_per_channel = [numpy.mean(ch_data) for ch, ch_data in enumerate(per_channel_data)]
+    # csv_writer.write_row([f"{(time - 1519042692.600763)/(60*60):.4f}"] + [f"{v:.2f}" for v in window_avg_per_channel])  # Wirkleistung
+    # return
+
     for voltage_ch, ampere_ch, pair_name in voltamp_pairs:
         voltage_data = per_channel_data[voltage_ch]  # the directly measured voltage, maybe has to be scaled
         ampere_data = per_channel_data[ampere_ch]  # the directly measured voltage, has to be converted to ampere
@@ -233,17 +238,29 @@ def print_window_analysis(csv_writer: CsvWriter,
         if voltage_to_ampere_factor != 1:
             ampere_data = [v * voltage_to_ampere_factor for v in ampere_data]
 
+        # TODO: for tests only, remove this line afterwards
+        # ampere_data = [a + 0.03 for a in ampere_data]
+        # voltage_data = [v + 5 for v in voltage_data]
 
         voltage_avg_local_min, voltage_avg_local_max = analyse_channel_avg_local_min_max(voltage_data)
         voltage_avg_local_min *= voltage_scale_factor
         voltage_avg_local_max *= voltage_scale_factor
         voltage_avg = numpy.mean(voltage_data) * voltage_scale_factor
+
+        # TODO: for tests only, remove these lines afterwards
+        # voltage_raw_data = per_channel_data[voltage_ch+7]
+        # voltage_raw_avg = numpy.mean(voltage_raw_data)
+        # print(voltage_raw_avg)
+
         Lx_P, Lx_Q, Lx_S, Lx_phase_angle, Lx_voltage_rms, Lx_ampere_rms =\
             analyse_pair_window(voltage_data, ampere_data)
 
         Lx_mf_fft_max, Lx_mf_fft_parabolic, Lx_mf_fft_gaussian, Lx_mf_autocorrelate_parabolic, Lx_mf_zerocrossing =\
             analyse_channel_window(voltage_data, input_sampling_rate)
 
+        # TODO: for tests only, remove these lines afterwards
+        # h = electro.measure_main_frequencies_fft(ampere_data, input_sampling_rate, 3)
+        # print(h)
 
         # work in Watt*sec
         PQS_work[pair_name][0] += Lx_P * delta
@@ -276,6 +293,9 @@ def print_window_analysis(csv_writer: CsvWriter,
         csv_writer.write_row([time_str, f"{pair_name}_F_GAU", f"{Lx_mf_fft_gaussian if Lx_mf_fft_gaussian is not None else -1:.6f}", "Hz"])
         csv_writer.write_row([time_str, f"{pair_name}_F_AUT", f"{Lx_mf_autocorrelate_parabolic:.6f}", "Hz"])
         csv_writer.write_row([time_str, f"{pair_name}_F_ZC", f"{Lx_mf_zerocrossing:.6f}", "Hz"])
+
+        # TODO: for test only, remove this line afterwards
+        # sys.exit(0)
 
     # write sum over all voltamp pairs
     csv_writer.write_row([time_str, f"Li_PW", f"{sum(list(zip(*PQS_work.values()))[0]) * wattsec_to_wh:.6f}", "Wh"])

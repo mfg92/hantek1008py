@@ -3,6 +3,8 @@ Example zero offset shift compensation function file
 """
 import math
 
+#  extracted from ch1-ch8_0V_24C-25.5C.csv.xz.s440.csv
+#                    a       ,        b       ,     c
 __zos_data = [
              [16.920415552899, -0.000381453840, 2012.6568],
              [21.070626029182, -0.000514977995, 1992.0672],
@@ -23,3 +25,7 @@ def calc_zos(ch: int, vscale: float, dtime: float) -> float:
         return a * math.e**(b * x) + c
 
     return __zero_offset_start[ch] - exp(dtime, *__zos_data[ch])
+
+
+if __name__ == '__main__':
+    print(*([t, calc_zos(0, 1.0, t)] for t in range(0, 120, 5)), sep="\n")

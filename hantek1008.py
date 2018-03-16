@@ -215,7 +215,7 @@ class Hantek1008Raw:
         scale_factor_id: List[int] = [Hantek1008Raw._vertical_scale_factor_to_id(sf) for sf in scale_factors]
         self.__send_cmd(0xa2, parameter=scale_factor_id, sec_till_response_request=0.2132)
 
-    def __send_set_active_channels(self, active_channels: List[int] = list(range(0, 8))):
+    def __send_set_active_channels(self, active_channels):
         """
         Activates only the channels thar are in the list
         :param active_channels: a list of the channels that should be active
@@ -282,7 +282,7 @@ class Hantek1008Raw:
         # self.__send_cmd(0xa0, parameter=bytes.fromhex("08"))
         # self.__send_cmd(0xaa, parameter=bytes.fromhex("0101010101010101"))
         # activate all 8 channels
-        self.__send_set_active_channels()
+        self.__send_set_active_channels(Hantek1008Raw.valid_channel_ids())
 
         self.__send_set_time_div(500 * 1000)  # 500us, the default value in the windows software
 
@@ -316,8 +316,9 @@ class Hantek1008Raw:
             samples3 = self.__send_c6_a6_command(0x03)
             samples = samples2 + samples3
             shorts = Hantek1008Raw.__from_bytes_to_shorts(samples)
-            zero_offset_per_channel = [sum(channel_data) / float(len(channel_data))
-                                       for channel_data in Hantek1008Raw.__to_per_channel_lists(shorts)]
+            per_channel_data = Hantek1008Raw.__to_per_channel_lists(shorts, Hantek1008Raw.valid_channel_ids())
+            zero_offset_per_channel = [sum(per_channel_data[ch]) / float(len(per_channel_data[ch]))
+                                       for ch in Hantek1008Raw.valid_channel_ids()]
             self._zero_offsets[vscale] = zero_offset_per_channel
 
     def _init3(self):
@@ -407,8 +408,10 @@ class Hantek1008Raw:
         # response ~ e806e406e506e406e406
 
         # now process the data
-        per_channel_data2 = Hantek1008Raw.__to_per_channel_lists(Hantek1008Raw.__from_bytes_to_shorts(samples2))
-        per_channel_data3 = Hantek1008Raw.__to_per_channel_lists(Hantek1008Raw.__from_bytes_to_shorts(samples3))
+        per_channel_data2 = Hantek1008Raw.__to_per_channel_lists(Hantek1008Raw.__from_bytes_to_shorts(samples2),
+                                                                 self.__active_channels)
+        per_channel_data3 = Hantek1008Raw.__to_per_channel_lists(Hantek1008Raw.__from_bytes_to_shorts(samples3),
+                                                                 self.__active_channels)
         return per_channel_data2, per_channel_data3
 
     @staticmethod
@@ -440,10 +443,9 @@ class Hantek1008Raw:
 
     def request_samples_roll_mode_single_row(self, **argv) \
             -> Generator[Dict[int, int], None, None]:
-        for channel_data in self.request_samples_roll_mode(**argv):
-            # TODO
-            for v in zip(*channel_data):
-                yield v
+        for per_channel_data in self.request_samples_roll_mode(**argv):
+            for row in list(zip(*per_channel_data.values())):
+                yield dict(zip(per_channel_data.keys(), row))
 
     def request_samples_roll_mode(self, sampling_rate: int = 440) \
             -> Generator[Dict[int, List[int]], None, None]:
@@ -487,11 +489,12 @@ class Hantek1008Raw:
                     ready_data_length -= 64
                     sample_response += sample_response_part
 
+                sample_shorts = Hantek1008Raw.__from_bytes_to_shorts(sample_response)
                 # in rolling mode there is an additional 9th channel, with values around 1742
                 # this channel will not be past to the caller
-                sample_shorts = Hantek1008Raw.__from_bytes_to_shorts(sample_response)
-                per_channel_data = Hantek1008Raw.__to_per_channel_lists(sample_shorts,  len(self.__active_channels) + 1)
-                yield per_channel_data[:(len(self.__active_channels))]
+                per_channel_data = self.__to_per_channel_lists(sample_shorts, self.__active_channels,
+                                                               expect_ninth_channel=True)
+                yield per_channel_data
         except GeneratorExit:
             # TODO: auto start pause tread?
             pass
@@ -622,12 +625,20 @@ class Hantek1008Raw:
         assert len(data) % 2 == 0
         return [data[i] + data[i + 1] * 256 for i in range(0, len(data), 2)]
 
-    def __to_per_channel_lists(self, shorts: List[int]) -> Dict[List[int]]:
+    @staticmethod
+    def __to_per_channel_lists(shorts: List[int], active_channels: List[int], expect_ninth_channel: bool = False) -> Dict[int, List[int]]:
         """Create a dictionary (of the size of 'channel_count') of lists,
-        where the list at key x contains the data for channel x+1 of the hantek device """
-        channel_count = len(self.__active_channels)
-        return {self.__active_channels[i]: shorts[i::channel_count]
-                for i in range(0, channel_count)}
+        where the dictionary at key x contains the data for channel x+1 of the hantek device.
+        In rolling mode there is an additional 9th channel, with values around 1742 this
+        channel will not be past to the caller.
+        """
+        active_channels = sorted(active_channels)
+        active_channel_count = len(active_channels)
+        real_channel_count = active_channel_count
+        if expect_ninth_channel:
+            real_channel_count += 1
+        return {active_channels[i]: shorts[i::real_channel_count]
+                for i in range(0, active_channel_count)}
 
 
 """
@@ -722,10 +733,10 @@ class Hantek1008(Hantek1008Raw):
 
     @overrides
     def request_samples_roll_mode_single_row(self, **argv)\
-            -> Generator[List[float], None, None]:
-        for raw_per_channel_list in self.request_samples_roll_mode(**argv):
-            for v in zip(*raw_per_channel_list):
-                yield v
+            -> Generator[Dict[int, float], None, None]:
+        for per_channel_data in self.request_samples_roll_mode(**argv):
+            for row in list(zip(*per_channel_data.values())):
+                yield dict(zip(per_channel_data.keys(), row))
 
     @overrides
     def request_samples_roll_mode(self, sampling_rate: int = 440, mode: str = "volt") \
@@ -734,23 +745,22 @@ class Hantek1008(Hantek1008Raw):
         assert mode in ["volt", "raw", "volt+raw"]
         active_channel_count = len(Hantek1008Raw.get_active_channels(self))
 
-        for raw_per_channel_list in Hantek1008Raw.request_samples_roll_mode(self, sampling_rate):
-            # assert len(raw_per_channel_list) == 8
-            assert len(raw_per_channel_list) == active_channel_count
-            assert isinstance(raw_per_channel_list[0], list)
-            result: List[Union[List[float], List[int]]] = []
+        for raw_per_channel_data in Hantek1008Raw.request_samples_roll_mode(self, sampling_rate):
+            assert len(raw_per_channel_data) == active_channel_count
+            result: Dict[int, Union[List[float], List[int]]] = {}
             if "volt" in mode:
-                result += self.__extract_channel_volts(raw_per_channel_list)
+                result.update(self.__extract_channel_volts(raw_per_channel_data))
             if "raw" in mode:
-                result += raw_per_channel_list
+                result.update({ch + Hantek1008Raw.channel_count(): values
+                               for ch, values in raw_per_channel_data.items()})
             yield result
 
-    def __extract_channel_volts(self, per_channel_lists: List[List[int]]) -> List[List[float]]:
+    def __extract_channel_volts(self, per_channel_data: Dict[int, List[int]]) -> Dict[int, List[float]]:
         """Extract the voltage values from the raw byte array that came from the device"""
         if self.__zero_offset_shift_compensation_channel is not None:
             self.__update_zero_offset_compensation_value(
-                per_channel_lists[self.__zero_offset_shift_compensation_channel])
-        return [self.__raw_to_volt(channel_data, ch) for ch, channel_data in enumerate(per_channel_lists)]
+                per_channel_data[self.__zero_offset_shift_compensation_channel])
+        return {ch: self.__raw_to_volt(channel_data, ch) for ch, channel_data in per_channel_data.items()}
 
     def __raw_to_volt(self, raw_values: List[int], channel_id: int) -> List[float]:
         """Convert the raw shorts to useful volt values"""

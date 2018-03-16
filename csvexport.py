@@ -261,26 +261,23 @@ def sample(device: Hantek1008, raw_or_volt: str, selected_channels: List[int], s
             for per_channel_data in device.request_samples_roll_mode(mode=raw_or_volt, sampling_rate=sampling_rate):
                 now_timestamp = datetime.datetime.now().timestamp()
 
-                def get_data_of_ch(ch: int):
-                    index = sorted(selected_channels).index(ch)
-                    # per_channel_data contains lists of values per channel, channels sorted ascending
-                    return per_channel_data[index]
-
+                print("per_channel_data: ", per_channel_data)
                 # after this, channels are sorted the same way as in selected_channels
-                per_channel_data = [get_data_of_ch(ch) for ch in selected_channels]
+                per_channel_data_list = [per_channel_data[ch] for ch in selected_channels]
+                print("per_channel_data_list: ", per_channel_data_list)
 
                 if milli_volt_int_representation:
-                    per_channel_data = [[f"{round(value*1000)}" for value in single_channel]
-                                        for single_channel in per_channel_data]
+                    per_channel_data_list = [[f"{round(value*1000)}" for value in single_channel]
+                                             for single_channel in per_channel_data_list]
 
                 if timestamp_style == "first_column":
-                    values_per_channel_count = len(per_channel_data[0])
+                    values_per_channel_count = len(per_channel_data_list[0])
                     deltatime_per_value = (now_timestamp-last_timestamp)/values_per_channel_count
                     timestamps_interpolated = [last_timestamp + i*deltatime_per_value
                                                for i in range(values_per_channel_count)]
-                    csv_writer.write_rows(zip(timestamps_interpolated, *per_channel_data))
+                    csv_writer.write_rows(zip(timestamps_interpolated, *per_channel_data_list))
                 else:  # timestamp_style == "own_row":
-                    csv_writer.write_rows(zip(*per_channel_data))
+                    csv_writer.write_rows(zip(*per_channel_data_list))
                     # timestamps are by nature UTC
                     csv_writer.write_comment(f"UNIX-Time: {now_timestamp}")
 

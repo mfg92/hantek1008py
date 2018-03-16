@@ -10,9 +10,9 @@ from threading import Thread
 import copy
 import sys
 
-# marking a child classes method with overrides makes sure the method overrides a parent class method
-# this check is only needed during development so its no problem if this package is not installed
-# to avoid errors we need to define a dummy decorator
+# marking a child class method with overrides makes sure the method overrides a parent class method.
+# this check is only needed during development so its no problem if this package is not installed.
+# to avoid errors, we need to define a dummy decorator.
 try:
     from overrides import overrides
 except ImportError:
@@ -35,7 +35,7 @@ class Hantek1008Raw:
     """
     This class communicates to a Hantek1008 device via USB.
     It supports configuring the device (set vertical scale, sampling frequency, waveform generator,..)
-    and measure samples with it. Either in continuous (rolling) mode or in windows (normal/burst) mode.
+    and measuring samples with it. Either in continuous (rolling) mode or in windows (normal/burst) mode.
     """
     # channel_id/channel_index are zero based
     # channel names are one based
@@ -53,15 +53,15 @@ class Hantek1008Raw:
                  active_channels: Optional[List[int]] = None) -> None:
         """
         :param ns_per_div:
-        :param vertical_scale_factor: must be an array of length 8 with a float scale value for each channel.
-        Or a single float, than all channel will have that scale factor. The float must be 1.0, 0.2 or 0.02.
+        :param vertical_scale_factor: must be an array of length 8 with a float scale value for each channel
+               or a single float scale factor applied to all channels. The float must be either 1.0, 0.2 or 0.02.
         :param active_channels: a list of channel that will be used
         """
 
         assert isinstance(vertical_scale_factor, float) \
                or len(vertical_scale_factor) == Hantek1008Raw.channel_count()
 
-        self.__ns_per_div: int = ns_per_div  # on value for all channels
+        self.__ns_per_div: int = ns_per_div  # one value for all channels
 
         self.__active_channels: List[int] = copy.deepcopy(active_channels) if active_channels is not None\
             else Hantek1008Raw.valid_channel_ids()
@@ -72,7 +72,7 @@ class Hantek1008Raw:
             if isinstance(vertical_scale_factor, float) \
             else copy.deepcopy(vertical_scale_factor)  # scale factor per channel
 
-        # dict of list of shorts, outer dict is of size 3 and contains values
+        # dict of list of floats, outer dict is of size 3 and contains values
         # for every vertical scale factor, inner list contains an zero offset per channel
         self._zero_offsets: Dict[float, List[float]] = None
 
@@ -86,7 +86,7 @@ class Hantek1008Raw:
         self.__cancel_pause_thread: bool = False
 
     def connect(self):
-        """Find a plugged hantek 1008c device and set up the connection to it"""
+        """Find a plugged in hantek 1008c device and set up the connection to it"""
 
         self._dev = usb.core.find(idVendor=0x0783, idProduct=0x5725)
 
@@ -98,15 +98,16 @@ class Hantek1008Raw:
         # configuration will be the active one
         self._dev.set_configuration()
 
-        # get an endpoint instance
         self._cfg = self._dev.get_active_configuration()
         self._intf = self._cfg[(0, 0)]
 
+        # get an output endpoint instance
         self.__out = usb.util.find_descriptor(
             self._intf,
             # match the first OUT endpoint
             custom_match=lambda e: usb.util.endpoint_direction(e.bEndpointAddress) == usb.util.ENDPOINT_OUT)
 
+        # get an input endpoint instance
         self.__in = usb.util.find_descriptor(
             self._intf,
             # match the first IN endpoint
@@ -117,7 +118,7 @@ class Hantek1008Raw:
 
     def __write_and_receive(self, message: bytes, response_length: int,
                             sec_till_response_request: float = 0.002, sec_till_start: float = 0.002) -> bytes:
-        """write and read from the device"""
+        """write to and read from the device"""
         start_time = time.time()
 
         assert isinstance(message, bytes)
@@ -159,8 +160,8 @@ class Hantek1008Raw:
             return response
 
     def __send_c6_a6_command(self, parameter: int) -> bytes:
-        """send the c602 or c603 command, then parse the response as sample_length. then follow CEIL(sample_length/64)
-        a602 or a603 request. The responses are concatenated and finally returned trimmed to the fit the sample_length.
+        """send the c602 or c603 command, then parse the response as sample_length. then CEIL(sample_length/64)
+        a602 or a603 requests follow. The responses are concatenated and finally returned trimmed to fit the sample_length.
         """
         assert parameter in [2, 3]
         response = self.__send_cmd(0xc6, parameter=[parameter], response_length=2, echo_expected=False)
@@ -535,7 +536,7 @@ class Hantek1008Raw:
 
     def set_generator_waveform(self, waveform: List[int]) -> None:
         """
-        Every Byte in the waveform list contains information vor every of the 8 digital ouputs to be on or of.
+        Every Byte in the waveform list contains information for every of the 8 digital ouputs to be on or of.
         The bit number i in one of those bytes tells if output i should be on or off in that part of the wave.
         :param waveform:
         :return:

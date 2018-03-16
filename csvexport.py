@@ -429,52 +429,52 @@ Collect data from device 'Hantek 1008'. Usage examples:
     command_group.add_argument(metavar='csv_path', dest='csv_path', nargs='?',
                                type=str, default=None,
                                help='Exports measured data to the given file in CSV format.'
-                                    " If filename ends with '.xz' the content is compress using lzma/xz."
-                                    " This reduces the filesize to ~ 1/12 compered to the uncompressed format."
-                                    " Those files can be decompressed using 'xz -dk <filename>")
+                                    " If the filename ends with '.xz' the content is compressed using lzma/xz."
+                                    " This reduces the file size to ~ 1/12 compared to the uncompressed format."
+                                    " Those files can be decompressed using 'xz -dk <filename>'.")
     command_group.add_argument('--calibrate', metavar=('calibrationfile_path', 'channels_at_once'), nargs=2,
                                type=str, default=None,
                                help='If set, calibrate the device by measuring given voltages and write'
                                     ' calibration values to given file.'
-                                    ' Multiple channels (1, 2, 4 or all 8) can get calibrated at the same time'
+                                    ' Multiple channels (1, 2, 4 or all 8) can be calibrated at the same time'
                                     ' if supplied with the same voltage. Ignores all other arguments.')
     parser.add_argument('-s', '--channels', metavar='channel', nargs='+',
                         type=channel_type, default=list(range(1, 9)),
-                        help="Select channels that are of interest")
+                        help="Selects channels of interest.")
     parser.add_argument('-l', '--loglevel', dest='log_level', nargs='?',
                         type=str, default="info", choices=str_to_log_level.keys(),
-                        help='Set the loglevel to debug')
+                        help='Sets the log level for debugging.')
     parser.add_argument('-v', '--vscale', metavar='scale', nargs="+",
                         type=float, default=[1.0], choices=Hantek1008.valid_vscale_factors(),
-                        help='Set the pre scale in the hardware, must be 1, 0.125, or 0.02. If one value is given, all '
-                             'selected channels will use that vscale, otherwise there must be one value per selected'
-                             'channel')
+                        help='Sets the pre scale in the hardware, must be 1, 0.125, or 0.02. If a single value is '
+                             'given, all selected channels will use that vscale, otherwise there must be one value '
+                             'per selected channel.')
     parser.add_argument('-c', '--calibrationfile', dest="calibration_file_path", metavar='calibrationfile_path',
                         type=str, default=None,
-                        help="Use the content of the given calibration file to correct the measured samples")
+                        help="Use the content of the given calibration file to correct the measured samples.")
     parser.add_argument('-r', '--raw', dest="raw_or_volt",
                         type=str, default="volt", const="raw", nargs='?', choices=["raw", "volt", "volt+raw"],
-                        help="Specifies whether the sample values return from the device should be transformed"
-                             " to volts (eventually using calibration data) or not. If flag is not set, it defaults"
-                             " to 'volt'. If flag is set without a parameter 'raw' is used")
+                        help="Specifies whether the sample values returned from the device should be transformed "
+                             "to volts (using calibration data if specified) or not. If not set, the default "
+                             "value is 'volt'. If the flag is set without a parameter, 'raw' is used.")
     parser.add_argument('-z', '--zoscompensation', dest="zos_compensation", metavar='x',
                         type=str, default=None, nargs='*',
                         help=
-                        """Compensate the zero offset shift that obscures over longer timescales.
+                        """Compensates the zero offset shift that occurs over longer timescales.
                         There are two possible ways of compensating that:
-                        (A) Compute shift out of an unused channels: Needs at least one unused channel, make sure
-                         that no voltage is applied to the given channel. 
-                        (B) Compute shift with the help of a given function. Such a function computes a correction-factor
-                         based on the time past since start.
-                        Defaults to no compensation. If used without an argument method A is used on channel 8.
-                        If one integer argument is given method A is used on that channel. Otherwise Method B is used.
-                        It awaits a path to a file with a python function 
+                        (A) Computing the shift out of an unused channel: Needs at least one unused channel, make sure
+                         that no external voltage is applied to the given channel. 
+                        (B) Computing the shift with the help of a given function. Such a function computes a 
+                         correction-factor based on the time passed since start.
+                        Defaults to no compensation. If used without an argument, method A is used on channel 8.
+                        If an integer argument is given, method A is used on that channel. Otherwise, method B is used,
+                        which expects a path to a python file with containing a function 
                         (calc_zos(ch: int, vscale: float, dtime: float)->float) in it 
                         and as a second argument a time offset (how long the device is already running in sec).
                         """)
     parser.add_argument('-f', '--samplingrate', dest='sampling_rate',
                         type=float, default=440, choices=Hantek1008.valid_roll_sampling_rates(),
-                        help='Set the sampling rate (in Hz) the device should use (default:440). If not all channels '
+                        help='Sets the sampling rate (in Hz) the device should use (default:440). If not all channels '
                              'are used the actual sampling rate is higher. The factors are: '
                              f'{[Hantek1008.actual_sampling_rate_factor(ch) for ch in  range(1, 9)]}. '
                              'E.g. if only two channels are used the actual sampling rate is 3.03 higher '
@@ -482,16 +482,16 @@ Collect data from device 'Hantek 1008'. Usage examples:
                              'the actual sampling the same way as if the channel is normally used.')
     parser.add_argument('-m', '--measuresamplingrate', dest='do_sampling_rate_measure', action="store_const",
                         default=False, const=True,
-                        help='Measure the exact samplingrate the device achieves by using the computer internal clock.'
-                             'Increases startup duration by ~10 sec')
+                        help='Measures the exact sampling rate the device achieves by using the computer internal '
+                             'clock. Increases startup duration by ~10 sec.')
     parser.add_argument('-t', '--timestampstyle', dest="timestamp_style",
                         type=str, default="own_row", nargs='?', choices=["own_row", "first_column"],
-                        help="Specifies the style the timestamps of the values are included in the CSV output. There"
+                        help="Specifies the style of the timestamps included in the CSV output. There"
                              " are two options: When the 'own_row' style is used, every time the device sends a bunch"
-                             " of measured samples, these are writen to the CSV output followed by one row with the"
+                             " of measured samples, these are written to the CSV output followed by one row with the"
                              " timestamp."
-                             " Use the 'first_column' option to let the first column have interpolated timestamps."
-                             " Default is 'own_row'.")
+                             " Use the 'first_column' option to let the first column of each line have an interpolated"
+                             " timestamp. Default is 'own_row'.")
 
     args = parser.parse_args()
 

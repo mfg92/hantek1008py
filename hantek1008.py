@@ -381,7 +381,7 @@ class Hantek1008Raw:
         response = self.__send_cmd(0xe9, echo_expected=False, response_length=2)
         assert response == bytes.fromhex("0109")
 
-    def request_samples_burst_mode(self) -> Dict[List[List[int]], List[List[int]]]:
+    def request_samples_burst_mode(self) -> Dict[int, List[int]]:
         """get the data"""
         # TODO Support other values than 8 active channels in burst mode
         assert len(self.__active_channels) == 8, "Currently only all channel active is supported in burst mode"
@@ -399,20 +399,18 @@ class Hantek1008Raw:
 
         self.__send_a55a_command()
 
-        samples2 = self.__send_c6_a6_command(0x02)
-        samples3 = self.__send_c6_a6_command(0x03)
+        sample_response = self.__send_c6_a6_command(0x02)
+        sample_response += self.__send_c6_a6_command(0x03)
 
         self.__send_cmd(0xe4, parameter=[0x01])
 
         self.__send_cmd(0xe6, parameter=[0x01], echo_expected=False, response_length=10)
         # response ~ e806e406e506e406e406
 
-        # now process the data
-        per_channel_data2 = Hantek1008Raw.__to_per_channel_lists(Hantek1008Raw.__from_bytes_to_shorts(samples2),
-                                                                 self.__active_channels)
-        per_channel_data3 = Hantek1008Raw.__to_per_channel_lists(Hantek1008Raw.__from_bytes_to_shorts(samples3),
-                                                                 self.__active_channels)
-        return per_channel_data2, per_channel_data3
+        sample_shorts = Hantek1008Raw.__from_bytes_to_shorts(sample_response)
+
+        per_channel_data = Hantek1008Raw.__to_per_channel_lists(sample_shorts, self.__active_channels)
+        return per_channel_data
 
     @staticmethod
     def channel_count() -> int:
@@ -431,7 +429,7 @@ class Hantek1008Raw:
         return copy.deepcopy(Hantek1008Raw.__VSCALE_FACTORS)
 
     @staticmethod
-    def actual_sampling_rate_factor(active_channel_count: int) -> List[float]:
+    def actual_sampling_rate_factor(active_channel_count: int) -> float:
         """
         If not all channels are used the actual sampling rate is higher than the
         given sampling rate. The factor describe how much higher it is, depending on the amount
@@ -740,25 +738,21 @@ class Hantek1008(Hantek1008Raw):
 
     @overrides
     def request_samples_roll_mode(self, sampling_rate: int = 440, mode: str = "volt") \
-            -> Generator[List[Union[List[float], List[int]]], None, None]:
+            -> Generator[Dict[int, Union[List[float], List[int]]], None, None]:
 
         assert mode in ["volt", "raw", "volt+raw"]
         active_channel_count = len(Hantek1008Raw.get_active_channels(self))
 
         for raw_per_channel_data in Hantek1008Raw.request_samples_roll_mode(self, sampling_rate):
             assert len(raw_per_channel_data) == active_channel_count
-            result: Dict[int, Union[List[float], List[int]]] = {}
-            if "volt" in mode:
-                result.update(self.__extract_channel_volts(raw_per_channel_data))
-                if self.__zero_offset_shift_compensation_channel is not None:
-                    del result[self.__zero_offset_shift_compensation_channel]
-            if "raw" in mode:
-                result.update({ch + Hantek1008Raw.channel_count(): values
-                               for ch, values in raw_per_channel_data.items()})
-                if self.__zero_offset_shift_compensation_channel is not None:
-                    del result[self.__zero_offset_shift_compensation_channel + Hantek1008Raw.channel_count()]
+            yield self.__process_raw_per_channel_data(raw_per_channel_data, mode)
 
-            yield result
+    def __remove_zosc_channel_data(self, per_channel_data: Dict[int, Union[List[int], List[float]]]) -> None:
+        if self.__zero_offset_shift_compensation_channel is not None:
+            if self.__zero_offset_shift_compensation_channel in per_channel_data:
+                del per_channel_data[self.__zero_offset_shift_compensation_channel]
+            if self.__zero_offset_shift_compensation_channel + Hantek1008Raw.channel_count() in per_channel_data:
+                del per_channel_data[self.__zero_offset_shift_compensation_channel]
 
     def __extract_channel_volts(self, per_channel_data: Dict[int, List[int]]) -> Dict[int, List[float]]:
         """Extract the voltage values from the raw byte array that came from the device"""
@@ -824,28 +818,25 @@ class Hantek1008(Hantek1008Raw):
         alpha = (delta_to_zero - units_less) / (units_greater - units_less)
         return (1.0 - alpha) * cfactor_less + alpha * cfactor_greater
 
+    def __process_raw_per_channel_data(self, raw_per_channel_data: Dict[int, List[int]], mode: str) \
+            -> Dict[int, Union[List[int], List[float]]]:
+        assert mode in ["raw", "volt", "volt+raw"]
+        result: Dict[int, Union[List[float], List[int]]] = {}
+        if "volt" in mode:
+            result.update(self.__extract_channel_volts(raw_per_channel_data))
+        if "raw" in mode:
+            raw_channel_offset = Hantek1008Raw.channel_count() if mode == "volt+raw" else 0
+            result.update({ch + raw_channel_offset: values
+                           for ch, values in raw_per_channel_data.items()})
+        self.__remove_zosc_channel_data(result)
+        return result
+
     @overrides
     def request_samples_burst_mode(self, mode: str = "volt") \
-            -> Union[
-               Tuple[List[List[int]], List[List[int]]],  # mode == raw
-               Tuple[List[List[float]], List[List[float]]],  # mode == volt
-               Tuple[List[Union[List[float], List[int]]], List[Union[List[float], List[int]]]],  # mode == volt+raw
-               ]:
-        # TODO Support other values than 8 active channels in burst mode
-
-        assert mode in ["raw", "volt", "volt+raw"]
+            -> Dict[int, Union[List[int], List[float]]]:
         assert self.__zero_offset_shift_compensation_channel is None, \
             "zero offset shift compensation is not implemented for burst mode"
-        per_channel_data2, per_channel_data3 = Hantek1008Raw.request_samples_burst_mode(self)
+        raw_per_channel_data = Hantek1008Raw.request_samples_burst_mode(self)
+        return self.__process_raw_per_channel_data(raw_per_channel_data, mode)
 
-        if mode == "raw":
-            return per_channel_data2, per_channel_data3
 
-        channel_volts2 = self.__extract_channel_volts(per_channel_data2)
-        channel_volts3 = self.__extract_channel_volts(per_channel_data3)
-
-        if mode == "volt":
-            return channel_volts2, channel_volts3
-
-        # mode == "volt+raw"
-        return channel_volts2 + per_channel_data2, channel_volts3 + per_channel_data3

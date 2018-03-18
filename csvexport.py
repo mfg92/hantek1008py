@@ -256,46 +256,44 @@ def sample(device: Hantek1008, raw_or_volt: str, selected_channels: List[int], s
         roll_mode = True
         milli_volt_int_representation = False
 
+        def write_per_channel_data(per_channel_data: Dict[int, Union[List[int], List[float]]],
+                                   time_of_first_value: float,
+                                   time_of_last_value: float) \
+                -> None:
+            # sort all channels the same way as in selected_channels
+            per_channel_data_list = [per_channel_data[ch] for ch in selected_channels]
+
+            if milli_volt_int_representation:
+                per_channel_data_list = [[int(round(value*1000)) for value in single_channel]
+                                         for single_channel in per_channel_data_list]
+
+            if timestamp_style == "first_column":
+                values_per_channel_count = len(per_channel_data_list[0])
+                deltatime_per_value = (time_of_last_value - time_of_first_value) / values_per_channel_count
+                timestamps_interpolated = [time_of_first_value + i * deltatime_per_value
+                                           for i in range(values_per_channel_count)]
+                csv_writer.write_rows(zip(timestamps_interpolated, *per_channel_data_list))
+            else:  # timestamp_style == "own_row":
+                csv_writer.write_rows(zip(*per_channel_data_list))
+                # timestamps are by nature UTC
+                csv_writer.write_comment(f"UNIX-Time: {time_of_last_value}")
+
         if roll_mode:
             last_timestamp = datetime.datetime.now().timestamp()
             for per_channel_data in device.request_samples_roll_mode(mode=raw_or_volt, sampling_rate=sampling_rate):
                 now_timestamp = datetime.datetime.now().timestamp()
-
-                # sort all channels the same way as in selected_channels
-                per_channel_data_list = [per_channel_data[ch] for ch in selected_channels]
-
-                if milli_volt_int_representation:
-                    per_channel_data_list = [[f"{round(value*1000)}" for value in single_channel]
-                                             for single_channel in per_channel_data_list]
-
-                if timestamp_style == "first_column":
-                    values_per_channel_count = len(per_channel_data_list[0])
-                    deltatime_per_value = (now_timestamp-last_timestamp)/values_per_channel_count
-                    timestamps_interpolated = [last_timestamp + i*deltatime_per_value
-                                               for i in range(values_per_channel_count)]
-                    csv_writer.write_rows(zip(timestamps_interpolated, *per_channel_data_list))
-                else:  # timestamp_style == "own_row":
-                    csv_writer.write_rows(zip(*per_channel_data_list))
-                    # timestamps are by nature UTC
-                    csv_writer.write_comment(f"UNIX-Time: {now_timestamp}")
-
+                write_per_channel_data(per_channel_data, last_timestamp, now_timestamp)
                 last_timestamp = now_timestamp
         else:  # burst mode
             # TODO currently not supported
             # TODO missing features:
             # * timestamp_style
-            # * change arrangement of channels if selected_channels is nor sorted
+            assert timestamp_style == "own_row"
             while True:
-                channel_data2, channel_data3 = device.request_samples_burst_mode()
+                per_channel_data = device.request_samples_burst_mode()
+                now_timestamp = datetime.datetime.now().timestamp()
+                write_per_channel_data(per_channel_data, None, now_timestamp)
 
-                print(len(channel_data2[0]), len(channel_data3[0]))
-                # channel_data = [cd2 + cd3 for cd2, cd3 in zip(channel_data2, channel_data3)]
-                # channel_data = [cd[70:] + cd[:70] for cd in channel_data]
-
-                csv_writer.write_rows(zip(*channel_data2))
-                csv_writer.write_rows(zip(*channel_data3))
-                # timestamps are by nature UTC
-                csv_writer.write_comment(f"UNIX-Time: { datetime.datetime.now().timestamp()}")
     except KeyboardInterrupt:
         log.info("Sample collection was stopped by user")
         pass

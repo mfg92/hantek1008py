@@ -329,15 +329,15 @@ class Hantek1008Raw:
 
         response = self.__send_cmd(0xf7, echo_expected=False, response_length=64)
         assert response == bytes.fromhex("2cfd8ffb54fa2ef878007a007b00780079007a0079007800b801bf01c301ba01"
-                                        "bb01be01b701b801f90203030803fb02fc020003f502f80294ff92ff8fff93ff")
+                                         "bb01be01b701b801f90203030803fb02fc020003f502f80294ff92ff8fff93ff")
 
         response = self.__send_cmd(0xf8, echo_expected=False, response_length=64)
         assert response == bytes.fromhex("92ff91ff96ff94ffc9fec4febdfec8fec7fec2fecffec9fe4cfe45fe3afe4afe"
-                                        "48fe42fe54fe4dfe70ff70ff71ff70ff71ff71ff72ff71ff7efe7bfe7afe7efe")
+                                         "48fe42fe54fe4dfe70ff70ff71ff70ff71ff71ff72ff71ff7efe7bfe7afe7efe")
 
         response = self.__send_cmd(0xfa, echo_expected=False, response_length=56)
         assert response == bytes.fromhex("7dfe7efe80fe7ffe90019401930192018f01900191018f0195029b0299029802"
-                                        "930294029702940290fd89fd84fd90fd8dfd8cfd94fd91fd")
+                                         "930294029702940290fd89fd84fd90fd8dfd8cfd94fd91fd")
 
         # self.send_cmd(0xa3, parameter=[0x10])
         self.__send_set_time_div(self.__ns_per_div)
@@ -381,7 +381,7 @@ class Hantek1008Raw:
         response = self.__send_cmd(0xe9, echo_expected=False, response_length=2)
         assert response == bytes.fromhex("0109")
 
-    def request_samples_burst_mode(self) -> Tuple[List[List[int]], List[List[int]]]:
+    def request_samples_burst_mode(self) -> Dict[List[List[int]], List[List[int]]]:
         """get the data"""
         # TODO Support other values than 8 active channels in burst mode
         assert len(self.__active_channels) == 8, "Currently only all channel active is supported in burst mode"
@@ -681,7 +681,7 @@ class Hantek1008(Hantek1008Raw):
             assert zero_offset_shift_compensation_channel not in active_channels
             assert zero_offset_shift_compensation_channel in Hantek1008Raw.valid_channel_ids()
             assert zero_offset_shift_compensation_channel not in active_channels
-            active_channels = [active_channels] + [zero_offset_shift_compensation_channel]
+            active_channels = active_channels + [zero_offset_shift_compensation_channel]
 
         Hantek1008Raw.__init__(self, ns_per_div, vertical_scale_factor, active_channels)
 
@@ -750,9 +750,14 @@ class Hantek1008(Hantek1008Raw):
             result: Dict[int, Union[List[float], List[int]]] = {}
             if "volt" in mode:
                 result.update(self.__extract_channel_volts(raw_per_channel_data))
+                if self.__zero_offset_shift_compensation_channel is not None:
+                    del result[self.__zero_offset_shift_compensation_channel]
             if "raw" in mode:
                 result.update({ch + Hantek1008Raw.channel_count(): values
                                for ch, values in raw_per_channel_data.items()})
+                if self.__zero_offset_shift_compensation_channel is not None:
+                    del result[self.__zero_offset_shift_compensation_channel + Hantek1008Raw.channel_count()]
+
             yield result
 
     def __extract_channel_volts(self, per_channel_data: Dict[int, List[int]]) -> Dict[int, List[float]]:

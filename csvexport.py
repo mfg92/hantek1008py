@@ -261,10 +261,8 @@ def sample(device: Hantek1008, raw_or_volt: str, selected_channels: List[int], s
             for per_channel_data in device.request_samples_roll_mode(mode=raw_or_volt, sampling_rate=sampling_rate):
                 now_timestamp = datetime.datetime.now().timestamp()
 
-                print("per_channel_data: ", per_channel_data)
-                # after this, channels are sorted the same way as in selected_channels
+                # sort all channels the same way as in selected_channels
                 per_channel_data_list = [per_channel_data[ch] for ch in selected_channels]
-                print("per_channel_data_list: ", per_channel_data_list)
 
                 if milli_volt_int_representation:
                     per_channel_data_list = [[f"{round(value*1000)}" for value in single_channel]

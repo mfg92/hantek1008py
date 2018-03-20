@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
-from typing import List, Dict
+from typing import List, Dict, Tuple, TextIO, Generator, Optional
 import numpy
 from utils.common import parse_csv_lines, open_csv_file
 import utils.electro as electro
@@ -18,7 +18,7 @@ assert sys.version_info >= (3, 6)
 VoltAmpChPair = namedtuple("VoltAmpChPair", ["voltage_ch", "ampere_ch", "name"])
 
 
-def main():
+def main() -> None:
 
     def va_pair_type(value: str) -> VoltAmpChPair:
         # vaild str eg 1:4
@@ -31,7 +31,7 @@ def main():
                                          int(match.group(2)),
                                          match.group(3))
 
-        def check_channel(channel: int):
+        def check_channel(channel: int) -> None:
             if not 1 <= channel <= 8:
                 raise argparse.ArgumentTypeError(f"There is no channel {channel}")
 
@@ -43,13 +43,13 @@ def main():
                                              f"and ampere ({volt_amp_ch_pair.ampere_ch}) channel must be different ")
         return volt_amp_ch_pair
 
-    def channel_type(value):
+    def channel_type(value: str) -> int:
         ivalue = int(value)
         if 1 <= ivalue <= 2*8:
             return ivalue
         raise argparse.ArgumentTypeError(f"There is no channel {value}")
 
-    def arg_assert(ok, fail_message):
+    def arg_assert(ok: bool, fail_message: str) -> None:
         if not ok:
             parser.error(fail_message)
 
@@ -100,9 +100,9 @@ def main():
     # read header (all comment lines before the data)
     header = []
     channel_names_line = ""
-    header_data_file_format = "auto"  # new versions of csvexport.py produces CSV files
-                                      # that start with '# HEADER and then before the actual data come
-                                      # a line with '# DATA' comes
+    header_data_file_format: bool = "auto"  # new versions of csvexport.py produces CSV files
+                                            # that start with '# HEADER and then before the actual data come
+                                            # a line with '# DATA' comes
     if header_data_file_format == "auto":
         if args.csv_input == "-":
             header_data_file_format = True
@@ -126,7 +126,8 @@ def main():
 
     device_sampling_rate, measured_sampling_rate, start_time, per_channel_data = parse_csv_lines(header)
 
-    sampling_rate = ["unknown", *device_sampling_rate, *measured_sampling_rate][-1]
+    assert len(device_sampling_rate) + len(measured_sampling_rate) > 0, "Found no sample rate in input"
+    sampling_rate: float = [*device_sampling_rate, *measured_sampling_rate][-1]
     assert len(start_time), "There should be exactly one timestamp in the header"
     start_time = start_time[0]
     channel_count = len(channel_names_line.split(","))
@@ -192,7 +193,7 @@ def main():
     return
 
 
-def read_value(csv_file):
+def read_value(csv_file: TextIO) -> Generator[Tuple[float, List[float]], None, None]:
     time = None  # the time as unix timestamp (sec since 1970 or so)
     while True:
         line = csv_file.readline()
@@ -218,10 +219,10 @@ def print_window_analysis(csv_writer: CsvWriter,
                           input_sampling_rate: float,
                           voltage_scale_factor: float,
                           voltage_to_ampere_factor: float
-                          ):
+                          ) -> None:
     wattsec_to_wh = 1.0 / (60 * 60)
     time_str = f"{time:.3f}"
-    Li_P, Li_Q, Li_S = 0, 0, 0
+    Li_P, Li_Q, Li_S = 0.0, 0.0, 0.0
 
     # TODO: for test, simple compute average of window per channel
     # window_avg_per_channel = [numpy.mean(ch_data) for ch, ch_data in enumerate(per_channel_data)]
@@ -308,7 +309,7 @@ def print_window_analysis(csv_writer: CsvWriter,
 
 
 def analyse_channel_window(channel_values: List[float], input_sampling_rate: float) \
-        -> (float, float, float, float, float):
+        -> Tuple[float, Optional[float], Optional[float], float, Optional[float]]:
     length = len(channel_values)
     fourier = numpy.fft.rfft(channel_values * numpy.blackman(length))
     # convert complex -> real
@@ -346,8 +347,8 @@ def analyse_channel_window(channel_values: List[float], input_sampling_rate: flo
     # print(sep="\n", *(f"{freq:7.3f} Hz, {(max(phase,max_sin[2])-min(phase, max_sin[2])):6.2f}°: {amp:.3f}"
     #                   for freq, amp, phase in crucial_sins))
 
-    main_frequency = fft_amplitude_points[max_index][0]
-    main_frequency_phase = fft_phase_points[max_index][0]
+    main_frequency: float = fft_amplitude_points[max_index][0]
+    main_frequency_phase: float = fft_phase_points[max_index][0]
 
     # print_column('main frequency(fft, max)', f'{main_frequency:.4f} Hz + {main_frequency_phase:6.2f}°')
     mf_fft_parabolic = mf_fft_gaussian = None
@@ -366,7 +367,7 @@ def analyse_channel_window(channel_values: List[float], input_sampling_rate: flo
 
 
 def analyse_pair_window(voltage_values: List[float], ampere_values: List[float])\
-        -> (float, float, float, float, float, float):
+        -> Tuple[float, float, float, float, float, float]:
 
     P, Q, S = electro.calc_power(voltage_values, ampere_values)
     phase_angle = math.acos(P / S)
@@ -375,8 +376,8 @@ def analyse_pair_window(voltage_values: List[float], ampere_values: List[float])
     return P, Q, S, phase_angle, voltage_rms, ampere_rms
 
 
-def analyse_channel_avg_local_min_max(channel_values: List[float]) -> (float, float):
-    def neighbor_iterator(values: List):
+def analyse_channel_avg_local_min_max(channel_values: List[float]) -> Tuple[float, float]:
+    def neighbor_iterator(values: List[float]) -> Generator[List[float], None, None]:
         for i in range(1, len(values)-1):
             yield values[i-1:i+2]
 

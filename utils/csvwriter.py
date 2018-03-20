@@ -1,3 +1,4 @@
+from typing import List, Any, Sequence, Callable, TextIO
 import threading
 import queue
 import csv
@@ -8,26 +9,26 @@ import csv
 try:
     from overrides import overrides
 except ImportError:
-    def overrides(method):
+    def overrides(method: Callable) -> Callable:
         return method
 
 
 class CsvWriter:
 
-    def __init__(self, file, delimiter):
+    def __init__(self, file: TextIO, delimiter: str) -> None:
         self.__csv_file = file
         self.__csv_writer = csv.writer(file, delimiter=delimiter)
 
-    def write_comment(self, comment: str):
+    def write_comment(self, comment: str) -> None:
         self.__csv_file.write(f"# {comment}\n")
 
-    def write_row(self, row):
+    def write_row(self, row: Sequence[Any]) -> None:
         self.__csv_writer.writerow(row)
 
-    def write_rows(self, rows):
+    def write_rows(self, rows: Sequence[Sequence[Any]]) -> None:
         self.__csv_writer.writerows(rows)
 
-    def close(self):
+    def close(self) -> None:
         self.__csv_file.close()
 
 
@@ -36,7 +37,7 @@ class ThreadedCsvWriter(CsvWriter):
     Writes content to a csv file using an extra thread
     """
 
-    def __init__(self, file, delimiter):
+    def __init__(self, file: TextIO, delimiter: str) -> None:
         super().__init__(file, delimiter)
         self.__closed: bool = False
         self.__work_queue: queue.Queue = queue.Queue()  # a thread-safe FIFO queue
@@ -44,27 +45,27 @@ class ThreadedCsvWriter(CsvWriter):
         self.__work_thread.start()
 
     @overrides
-    def write_comment(self, comment: str):
+    def write_comment(self, comment: str) -> None:
         self.__enqueue_work(super().write_comment, comment)
 
     @overrides
-    def write_row(self, row):
+    def write_row(self, row: Sequence[Any]) -> None:
         self.__enqueue_work(super().write_row, row)
 
     @overrides
-    def write_rows(self, rows):
+    def write_rows(self, rows: Sequence[Sequence[Any]]) -> None:
         self.__enqueue_work(super().write_rows, rows)
 
-    def __enqueue_work(self, func, *params):
+    def __enqueue_work(self, func: Callable, *params: Any) -> None:
         self.__work_queue.put((func, params))
 
-    def __do_work(self):
+    def __do_work(self) -> None:
         while not self.__closed:
             func, params = self.__work_queue.get()
             func(*params)
 
-    def close(self):
-        def stop():
+    def close(self) -> None:
+        def stop() -> None:
             self.__closed = True
             # super without arguments does not work here inside a locally defined function
             super(ThreadedCsvWriter, self).close()

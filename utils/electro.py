@@ -1,4 +1,4 @@
-from typing import List, Union, Tuple
+from typing import List, Union, Tuple, Optional
 from math import sqrt, log
 import numpy as np
 
@@ -58,7 +58,7 @@ def gaussian_interpolation(data: List[float], local_max_index: int) -> float:
 
 
 def measure_main_frequency_zero_crossing(data: List[float], sampling_rate: float, calc_offset: bool = False) \
-        -> Union[float, Tuple[float, float]]:
+        -> Optional[float]:
     assert sampling_rate > 0
     assert not calc_offset, "Offset calculation is not supported yet"
 
@@ -86,10 +86,7 @@ def measure_main_frequency_zero_crossing(data: List[float], sampling_rate: float
     # delta = (end - start) * (1.0 / sampling_rate)
     # periods = (len(zero_crossings) - 1) / 2
     # frequency = 1.0 / (delta / periods)
-    if not calc_offset:
-        return frequency
-    offset = 0
-    return frequency, offset
+    return frequency
 
 
 def measure_main_frequency_fft(samples: List[float], sampling_rate: float, mode: str = "parabolic") -> float:

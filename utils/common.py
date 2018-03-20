@@ -1,5 +1,5 @@
 import re
-from typing import List, Callable, Tuple
+from typing import List, Callable, Tuple, IO, TextIO, Optional
 import lzma
 import time
 import math
@@ -12,7 +12,7 @@ sampling_rate_regex = re.compile(r"(# samplingrate:)\s+(\d*\.?\d+)\s*(hz)", re.I
 unix_time_regex = re.compile(r"(# unix-time:)\s+(\d*\.?\d+)\s*", re.IGNORECASE)
 
 
-def csv_file_type(file_path: str):
+def csv_file_type(file_path: str) -> TextIO:
     """for use in argparse as type="""
     try:
         return open_csv_file(file_path)
@@ -41,7 +41,7 @@ def parse_csv_lines(lines: List[str]) \
     return sampling_rate, measured_sampling_rate, unix_time, per_channel_data
 
 
-def open_csv_file(file_name: str, mode: str="rt"):
+def open_csv_file(file_name: str, mode: str="rt") -> IO:
     open_function = lzma.open if file_name.endswith(".xz") else open
     return open_function(file_name, mode=mode)
 
@@ -62,9 +62,9 @@ def parse_csv_file(file_name: str) \
     sampling_rate: List[float] = []
     measured_sampling_rate: List[float] = []
     unix_time: List[float] = []
-    per_channel_data: List[List[float]] = None
+    per_channel_data: Optional[List[List[float]]] = None
 
-    def on_parse_func(sampling_rate_part, measured_sampling_rate_part, unix_time_part, per_channel_data_part):
+    def on_parse_func(sampling_rate_part, measured_sampling_rate_part, unix_time_part, per_channel_data_part) -> None:
         nonlocal sampling_rate, measured_sampling_rate, unix_time, per_channel_data
 
         only_comments = False if per_channel_data_part else True

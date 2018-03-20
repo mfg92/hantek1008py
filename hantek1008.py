@@ -189,7 +189,7 @@ class Hantek1008Raw:
             if response[0] in [2, 3]:
                 return
             sleep(0.02)
-            self.__send_cmd(0xf3)
+            self.__send_ping()
         raise RuntimeError(f"a55a command failed, all {attempts} attempts were answered with 0 or 1.")
 
     def __send_set_time_div(self, ns_per_div: int = 500000):
@@ -253,6 +253,9 @@ class Hantek1008Raw:
         assert 0 <= level <= 2**12
         self.__send_cmd(0xab, parameter=int.to_bytes(level, length=2, byteorder="big", signed=False))
 
+    def __send_ping(self):
+        self.__send_cmd(0xf3)
+
     def init(self):
         self._init1()
         self._init2()
@@ -260,10 +263,10 @@ class Hantek1008Raw:
 
     def _init1(self):
         """Initialize the device like the windows software does it"""
-        self.__send_cmd(0xb0)  # 176
+        self.__send_cmd(0xb0)
         sleep(0.7)  # not sure if needed
-        self.__send_cmd(0xb0)  # 176
-        self.__send_cmd(0xf3)  # 243
+        self.__send_cmd(0xb0)
+        self.__send_ping()
 
 
         #self.__send_cmd(0xb9, parameter=bytes.fromhex("01 b0 04 00 00"))  # 185
@@ -318,7 +321,7 @@ class Hantek1008Raw:
         for vscale_id in range(1, 4):
             vscale = Hantek1008Raw._vertical_scale_id_to_factor(vscale_id)
 
-            self.__send_cmd(0xf3)
+            self.__send_ping()
 
             self.__send_set_vertical_scale([vscale] * Hantek1008Raw.channel_count())
 
@@ -368,23 +371,12 @@ class Hantek1008Raw:
         self.__send_cmd(0xe6, parameter=[0x01], echo_expected=False, response_length=10)
         # assert response == bytes.fromhex("eb06e606e606e706e706")
 
-        self.__send_cmd(0xf3)
-
-        # # set the count of active channels
-        # self.__send_cmd(0xa0, parameter=[0x08])
-        #
-        # # what channels to activate?
-        # self.__send_cmd(0xaa, parameter=[0x01] * 8)
-
-        # activate all 8 channels
-        # self.__send_set_active_channels()
+        self.__send_ping()
 
         self.__send_set_active_channels(self.__active_channels)
 
-        # self.send_cmd(0xa2, parameter=bytes.fromhex("0303030303030303"), sec_till_response_request=0.2132)
         self.__send_set_vertical_scale(self.__vertical_scale_factors)
 
-        # self.send_cmd(0xa3, parameter=[0x10])        # some times even 0x10         oder 0x12
         self.__send_set_time_div(self.__ns_per_div)
 
         self.__send_set_trigger(self.__trigger_channel, self.__trigger_slope)
@@ -402,7 +394,7 @@ class Hantek1008Raw:
     def request_samples_burst_mode(self) -> Dict[int, List[int]]:
         """get the data"""
 
-        self.__send_cmd(0xf3)
+        self.__send_ping()
 
         # these two commands are not necessarily required
         self.__send_cmd(0xe4, parameter=[0x01])
@@ -422,7 +414,6 @@ class Hantek1008Raw:
 
         # these two commands are not necessarily required
         self.__send_cmd(0xe4, parameter=[0x01])
-
         self.__send_cmd(0xe6, parameter=[0x01], echo_expected=False, response_length=10)
         # response ~ e806e406e506e406e406
 
@@ -487,7 +478,7 @@ class Hantek1008Raw:
             while True:
                 ready_data_length = 0
                 while ready_data_length == 0:
-                    self.__send_cmd(0xf3)
+                    self.__send_ping()
 
                     response = self.__send_cmd(0xc7, response_length=2, echo_expected=False)
                     ready_data_length = int.from_bytes(response, byteorder="big", signed=False)
@@ -580,7 +571,7 @@ class Hantek1008Raw:
     def __loop_f3(self) -> None:
         log.debug("start pause thread")
         while not self.__cancel_pause_thread:
-            self.__send_cmd(0xf3)
+            self.__send_ping()
             sleep(0.01)
         log.debug("stop pause thread")
 
@@ -607,7 +598,7 @@ class Hantek1008Raw:
 
         # read maybe leftover data
         self.__clear_leftover()
-        self.__send_cmd(0xf3)
+        self.__send_ping()
         self.__send_cmd(0xf4)
         self._dev.reset()
 

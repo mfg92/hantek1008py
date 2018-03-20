@@ -11,9 +11,33 @@ import sys
 import math
 from usb.core import USBError
 from time import sleep
-from utils.csvwriter import ThreadedCsvWriter
+from utils.csvwriter import ThreadedCsvWriter, CsvWriter
+from enum import Enum
 
 assert sys.version_info >= (3, 6)
+
+# SamplingMode = enum.Enum("SamplingMode", ["BURST", "ROLL"])
+
+
+class ArgparseEnum(Enum):
+    def __str__(self):
+        return self.value
+
+
+class RawVoltMode(ArgparseEnum):
+    VOLT = "volt"
+    RAW = "raw"
+    VOLT_AND_RAW = "volt+raw"
+
+
+class SamplingMode(ArgparseEnum):
+    BURST = "burst"
+    ROLL = "roll"
+
+
+class TimestampStyle(ArgparseEnum):
+    OWN_ROW = "own_row"
+    FIRST_COLUMN = "first_column"
 
 
 def main(csv_file_path: str,
@@ -25,9 +49,10 @@ def main(csv_file_path: str,
          zero_offset_shift_compensation_channel: Optional[int]=None,
          zero_offset_shift_compensation_function_file_path: Optional[str]=None,
          zero_offset_shift_compensation_function_time_offset_sec: int=0,
-         raw_or_volt: str="volt",
+         raw_or_volt: RawVoltMode=RawVoltMode.VOLT,
+         samlping_mode: SamplingMode=SamplingMode.ROLL,
          sampling_rate: float=440,
-         timestamp_style: str="own_row",
+         timestamp_style: TimestampStyle=TimestampStyle.OWN_ROW,
          do_sampling_rate_measure: bool=True) -> None:
 
     if selected_channels is None or len(selected_channels) == 0:
@@ -60,9 +85,6 @@ def main(csv_file_path: str,
         vertical_scale_factor = [1.0 if i not in selected_channels
                                  else vertical_scale_factor[selected_channels.index(i)]
                                  for i in range(8)]
-
-    timestamp_style = timestamp_style.lower()
-    assert timestamp_style in ["first_column", "own_row"]
 
     correction_data: CorrectionDataType = [{} for _ in range(8)]  # list of dicts of dicts
     # use case: correction_data[channel_id][vscale][units] = correction_factor
@@ -132,7 +154,7 @@ def main(csv_file_path: str,
     # data collection is in loop because in case of an error it restarts the collection
     for i in range(1, 100):
         try:
-            sample(device, raw_or_volt, selected_channels, sampling_rate, vertical_scale_factor,
+            sample(device, raw_or_volt, selected_channels, samlping_mode, sampling_rate, vertical_scale_factor,
                    csv_file_path, timestamp_style, measured_sampling_rate)
             # no error? -> finished by user interaction
             break
@@ -196,18 +218,26 @@ def connect(vertical_scale_factor: Union[float, List[float]],
     return device
 
 
-def sample(device: Hantek1008, raw_or_volt: str, selected_channels: List[int], sampling_rate:float,
-           vertical_scale_factor: List[float], csv_file_path: str, timestamp_style: str,
-           measured_sampling_rate: float = None):
+def sample(device: Hantek1008,
+           raw_or_volt: RawVoltMode,
+           selected_channels: List[int],
+           sampling_mode: SamplingMode,
+           sampling_rate: float,
+           vertical_scale_factor: List[float],
+           csv_file_path: str,
+           timestamp_style: TimestampStyle,
+           measured_sampling_rate: float = None
+           ):
     log.info(f"Processing data of channel{'' if len(selected_channels) == 1 else 's'}:"
              f" {' '.join([str(i+1) for i in selected_channels])}")
 
     computed_actual_sampling_rate = Hantek1008.actual_sampling_rate_factor(len(selected_channels)) * sampling_rate
-    log.warning(f"When not using all 8 channels, the actual sampling rate ({computed_actual_sampling_rate:.2f}) is "
-                f"higher than the given sampling_rate ({sampling_rate})! "
-                f"Best is to use the --measuresamplingrate flag.")
+    if len(selected_channels) != Hantek1008.channel_count():
+        log.warning(f"When not using all 8 channels, the actual sampling rate ({computed_actual_sampling_rate:.2f}) is "
+                    f"higher than the given sampling_rate ({sampling_rate})! "
+                    f"Best is to use the --measuresamplingrate flag.")
 
-    if raw_or_volt == "volt+raw":  # add the coresponding raw values to the selected channel list
+    if raw_or_volt == RawVoltMode.VOLT_AND_RAW:  # add the coresponding raw values to the selected channel list
         selected_channels += [sc + Hantek1008.channel_count() for sc in selected_channels]
 
     try:
@@ -223,7 +253,7 @@ def sample(device: Hantek1008, raw_or_volt: str, selected_channels: List[int], s
             log.info(f"Exporting data to file '{csv_file_path}'...")
             csv_file = open(csv_file_path, 'at', newline='')
 
-        csv_writer = ThreadedCsvWriter(csv_file, delimiter=',')
+        csv_writer: CsvWriter = ThreadedCsvWriter(csv_file, delimiter=',')
 
         csv_writer.write_comment("HEADER")
 
@@ -237,6 +267,8 @@ def sample(device: Hantek1008, raw_or_volt: str, selected_channels: List[int], s
         if timestamp_style == "first_column":
             channel_titles = ["time"] + channel_titles
         csv_writer.write_comment(f"{', '.join(channel_titles)}")
+
+        csv_writer.write_comment(f"sampling mode: {str(sampling_mode)}")
 
         csv_writer.write_comment(f"intended samplingrate: {sampling_rate} Hz")
         csv_writer.write_comment(f"samplingrate: {computed_actual_sampling_rate} Hz")
@@ -253,7 +285,6 @@ def sample(device: Hantek1008, raw_or_volt: str, selected_channels: List[int], s
         csv_writer.write_comment(f"DATA")
 
         # TODO: make these configurable
-        roll_mode = True
         milli_volt_int_representation = False
 
         def write_per_channel_data(per_channel_data: Dict[int, Union[List[int], List[float]]],
@@ -278,9 +309,9 @@ def sample(device: Hantek1008, raw_or_volt: str, selected_channels: List[int], s
                 # timestamps are by nature UTC
                 csv_writer.write_comment(f"UNIX-Time: {time_of_last_value}")
 
-        if roll_mode:
+        if sampling_mode == SamplingMode.ROLL:
             last_timestamp = datetime.datetime.now().timestamp()
-            for per_channel_data in device.request_samples_roll_mode(mode=raw_or_volt, sampling_rate=sampling_rate):
+            for per_channel_data in device.request_samples_roll_mode(mode=str(raw_or_volt), sampling_rate=sampling_rate):
                 now_timestamp = datetime.datetime.now().timestamp()
                 write_per_channel_data(per_channel_data, last_timestamp, now_timestamp)
                 last_timestamp = now_timestamp
@@ -288,7 +319,7 @@ def sample(device: Hantek1008, raw_or_volt: str, selected_channels: List[int], s
             # TODO currently not supported
             # TODO missing features:
             # * timestamp_style
-            assert timestamp_style == "own_row"
+            assert timestamp_style == TimestampStyle.OWN_ROW
             while True:
                 per_channel_data = device.request_samples_burst_mode()
                 now_timestamp = datetime.datetime.now().timestamp()
@@ -446,7 +477,7 @@ Collect data from device 'Hantek 1008'. Usage examples:
                         type=str, default=None,
                         help="Use the content of the given calibration file to correct the measured samples.")
     parser.add_argument('-r', '--raw', dest="raw_or_volt",
-                        type=str, default="volt", const="raw", nargs='?', choices=["raw", "volt", "volt+raw"],
+                        type=str, default=RawVoltMode.VOLT, const=RawVoltMode.RAW, nargs='?', choices=list(RawVoltMode),
                         help="Specifies whether the sample values returned from the device should be transformed "
                              "to volts (using calibration data if specified) or not. If not set, the default "
                              "value is 'volt'. If the flag is set without a parameter, 'raw' is used.")
@@ -465,6 +496,9 @@ Collect data from device 'Hantek 1008'. Usage examples:
                         (calc_zos(ch: int, vscale: float, dtime: float)->float) in it 
                         and as a second argument a time offset (how long the device is already running in sec).
                         """)
+    parser.add_argument('-b', '--samplingmode', dest='sampling_mode',
+                        type=SamplingMode, default=SamplingMode.ROLL, choices=list(SamplingMode),
+                        help="TODO")
     parser.add_argument('-f', '--samplingrate', dest='sampling_rate',
                         type=float, default=440, choices=Hantek1008.valid_roll_sampling_rates(),
                         help='Sets the sampling rate (in Hz) the device should use (default:440). If not all channels '
@@ -478,7 +512,7 @@ Collect data from device 'Hantek 1008'. Usage examples:
                         help='Measures the exact sampling rate the device achieves by using the computer internal '
                              'clock. Increases startup duration by ~10 sec.')
     parser.add_argument('-t', '--timestampstyle', dest="timestamp_style",
-                        type=str, default="own_row", nargs='?', choices=["own_row", "first_column"],
+                        type=TimestampStyle, default=TimestampStyle.OWN_ROW, nargs='?', choices=list(TimestampStyle),
                         help="Specifies the style of the timestamps included in the CSV output. There"
                              " are two options: When the 'own_row' style is used, every time the device sends a bunch"
                              " of measured samples, these are written to the CSV output followed by one row with the"
@@ -546,6 +580,7 @@ Collect data from device 'Hantek 1008'. Usage examples:
          args.zos_compensation[1]
          if args.zos_compensation is not None and len(args.zos_compensation) == 2
          else 0,
+         samlping_mode=args.sampling_mode,
          sampling_rate=args.sampling_rate,
          timestamp_style=args.timestamp_style,
          do_sampling_rate_measure=args.do_sampling_rate_measure)

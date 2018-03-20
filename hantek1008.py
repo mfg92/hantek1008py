@@ -383,13 +383,11 @@ class Hantek1008Raw:
 
     def request_samples_burst_mode(self) -> Dict[int, List[int]]:
         """get the data"""
-        # TODO Support other values than 8 active channels in burst mode
-        assert len(self.__active_channels) == 8, "Currently only all channel active is supported in burst mode"
 
         self.__send_cmd(0xf3)
 
+        # these two commands are not necessarily required
         self.__send_cmd(0xe4, parameter=[0x01])
-
         self.__send_cmd(0xe6, parameter=[0x01], echo_expected=False, response_length=10)
         # response ~ e906e506e406e406e506
 
@@ -397,11 +395,14 @@ class Hantek1008Raw:
 
         self.__send_cmd(0xc0)
 
+        self.__send_cmd(0xc2)
+
         self.__send_a55a_command()
 
         sample_response = self.__send_c6_a6_command(0x02)
         sample_response += self.__send_c6_a6_command(0x03)
 
+        # these two commands are not necessarily required
         self.__send_cmd(0xe4, parameter=[0x01])
 
         self.__send_cmd(0xe6, parameter=[0x01], echo_expected=False, response_length=10)

@@ -50,7 +50,11 @@ class Hantek1008Raw:
 
     def __init__(self, ns_per_div: int = 500_000,
                  vertical_scale_factor: Union[float, List[float]] = 1.0,
-                 active_channels: Optional[List[int]] = None) -> None:
+                 active_channels: Optional[List[int]] = None,
+                 trigger_channel: int = 0,
+                 trigger_slope: str = "rising",
+                 trigger_level: int = 2048
+                 ) -> None:
         """
         :param ns_per_div:
         :param vertical_scale_factor: must be an array of length 8 with a float scale value for each channel
@@ -71,6 +75,10 @@ class Hantek1008Raw:
         self.__vertical_scale_factors: List[float] = [vertical_scale_factor] * Hantek1008Raw.channel_count() \
             if isinstance(vertical_scale_factor, float) \
             else copy.deepcopy(vertical_scale_factor)  # scale factor per channel
+
+        self.__trigger_channel: int = trigger_channel
+        self.__trigger_slope: str = trigger_slope
+        self.__trigger_level: int = trigger_level
 
         # dict of list of floats, outer dict is of size 3 and contains values
         # for every vertical scale factor, inner list contains an zero offset per channel
@@ -234,6 +242,17 @@ class Hantek1008Raw:
         # what channels should be active?
         self.__send_cmd(0xaa, parameter=active_channels_byte_map)
 
+    def __send_set_trigger(self, source_channel, slope) -> None:
+        slope_map = {"rising": 0, "falling": 1}
+        assert source_channel in self.valid_channel_ids()
+        assert slope in slope_map, f"Only following slope types are allowed: {list(slope_map.keys())}"
+
+        self.__send_cmd(0xc1, parameter=[source_channel, slope_map[slope]])
+
+    def __send_set_trigger_level(self, level) -> None:
+        assert 0 <= level <= 2**12
+        self.__send_cmd(0xab, parameter=int.to_bytes(level, length=2, byteorder="big", signed=False))
+
     def init(self):
         self._init1()
         self._init2()
@@ -286,7 +305,7 @@ class Hantek1008Raw:
 
         self.__send_set_time_div(500 * 1000)  # 500us, the default value in the windows software
 
-        self.__send_cmd(0xc1, parameter=bytes.fromhex("0000"))
+        self.__send_set_trigger(0, "rising")
 
         response = self.__send_cmd(0xa7, parameter=bytes.fromhex("0000"), response_length=1)
         assert response == bytes.fromhex("00")
@@ -368,15 +387,14 @@ class Hantek1008Raw:
         # self.send_cmd(0xa3, parameter=[0x10])        # some times even 0x10         oder 0x12
         self.__send_set_time_div(self.__ns_per_div)
 
-        self.__send_cmd(0xc1, parameter=[0x07, 0x00])  # some times even [0x07, 0x00] oder [0x00, 0x01]
+        self.__send_set_trigger(self.__trigger_channel, self.__trigger_slope)
 
         response = self.__send_cmd(0xa7, parameter=[0x00, 0x00], response_length=1)
         assert response == bytes.fromhex("00")
 
         self.__send_cmd(0xac, parameter=bytes.fromhex("0000000001000579"))
 
-        self.__send_cmd(0xab, parameter=bytes.fromhex("080e"))  # some times even 080e oder 0811
-        # oder 080f oder 07fd oder 07e9
+        self.__send_set_trigger_level(self.__trigger_level)
 
         response = self.__send_cmd(0xe9, echo_expected=False, response_length=2)
         assert response == bytes.fromhex("0109")

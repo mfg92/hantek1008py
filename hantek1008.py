@@ -253,8 +253,8 @@ class Hantek1008Raw:
         assert 0 <= level <= 2**12
         self.__send_cmd(0xab, parameter=int.to_bytes(level, length=2, byteorder="big", signed=False))
 
-    def __send_ping(self):
-        self.__send_cmd(0xf3)
+    def __send_ping(self, sec_till_start: float=0) -> None:
+        self.__send_cmd(0xf3, sec_till_start=sec_till_start)
 
     def init(self):
         self._init1()
@@ -361,7 +361,6 @@ class Hantek1008Raw:
         assert response == bytes.fromhex("7dfe7efe80fe7ffe90019401930192018f01900191018f0195029b0299029802"
                                          "930294029702940290fd89fd84fd90fd8dfd8cfd94fd91fd")
 
-        # self.send_cmd(0xa3, parameter=[0x10])
         self.__send_set_time_div(self.__ns_per_div)
 
         self.__send_cmd(0xac, parameter=bytes.fromhex("00c80002bd0002bd"))
@@ -466,7 +465,7 @@ class Hantek1008Raw:
             sample_rate_id = Hantek1008Raw.__roll_mode_sampling_rate_to_id_dic[sampling_rate]
             self.__send_cmd(0xa3, parameter=[sample_rate_id])
 
-            self.__send_cmd(0xf3, sec_till_start=0.100)
+            self.__send_ping(sec_till_start=0.0100)
 
             self.__send_cmd(0xa4, parameter=[0x02])
 

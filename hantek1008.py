@@ -16,7 +16,7 @@ import sys
 try:
     from overrides import overrides
 except ImportError:
-    def overrides(method):
+    def overrides(method: Callable) -> Callable:
         return method
 
 assert sys.version_info >= (3, 6)
@@ -82,7 +82,7 @@ class Hantek1008Raw:
 
         # dict of list of floats, outer dict is of size 3 and contains values
         # for every vertical scale factor, inner list contains an zero offset per channel
-        self._zero_offsets: Dict[float, List[float]] = None
+        self._zero_offsets: Optional[Dict[float, List[float]]] = None
 
         self.__out: usb.core.Endpoint = None  # the usb out endpoint
         self.__in: usb.core.Endpoint = None  # the usb in endpoint
@@ -90,10 +90,10 @@ class Hantek1008Raw:
         self._cfg: usb.core.Configuration = None  # the used usb configuration
         self._intf: usb.core.Interface = None  # the used usb interface
 
-        self.__pause_thread: Thread = None
+        self.__pause_thread: Optional[Thread] = None
         self.__cancel_pause_thread: bool = False
 
-    def connect(self):
+    def connect(self) -> None:
         """Find a plugged in hantek 1008c device and set up the connection to it"""
 
         self._dev = usb.core.find(idVendor=0x0783, idProduct=0x5725)
@@ -182,7 +182,7 @@ class Hantek1008Raw:
             samples += response
         return samples[0:sample_length]
 
-    def __send_a55a_command(self, attempts=20):
+    def __send_a55a_command(self, attempts: int=20) -> None:
         for _ in range(attempts):
             response = self.__send_cmd(0xa5, parameter=[0x5a], response_length=1)
             assert response[0] in [0, 1, 2, 3]
@@ -192,7 +192,7 @@ class Hantek1008Raw:
             self.__send_ping()
         raise RuntimeError(f"a55a command failed, all {attempts} attempts were answered with 0 or 1.")
 
-    def __send_set_time_div(self, ns_per_div: int = 500000):
+    def __send_set_time_div(self, ns_per_div: int = 500000) -> None:
         """send the a3 command to set the sample rate.
         only allows values that follow this pattern: (1|2|3){0}. eg. 10, 2000 or 5.
         Maximum is 200_000_000"""
@@ -214,7 +214,7 @@ class Hantek1008Raw:
         assert vs_factor in Hantek1008Raw.__VSCALE_FACTORS
         return Hantek1008Raw.__VSCALE_FACTORS.index(vs_factor) + 1
 
-    def __send_set_vertical_scale(self, scale_factors: List[float]):
+    def __send_set_vertical_scale(self, scale_factors: List[float]) -> None:
         """send the a2 command to set the vertical sample scale factor per channel.
         Only following values are allowed: 1.0, 0.125, 0.02 [TODO: check] Volt/Div.
         scale_factor must be an array of length 8 with a float scale value for each channel.
@@ -223,7 +223,7 @@ class Hantek1008Raw:
         scale_factor_id: List[int] = [Hantek1008Raw._vertical_scale_factor_to_id(sf) for sf in scale_factors]
         self.__send_cmd(0xa2, parameter=scale_factor_id, sec_till_response_request=0.2132)
 
-    def __send_set_active_channels(self, active_channels):
+    def __send_set_active_channels(self, active_channels: List[int]) -> None:
         """
         Activates only the channels thar are in the list
         :param active_channels: a list of the channels that should be active
@@ -242,26 +242,26 @@ class Hantek1008Raw:
         # what channels should be active?
         self.__send_cmd(0xaa, parameter=active_channels_byte_map)
 
-    def __send_set_trigger(self, source_channel, slope) -> None:
+    def __send_set_trigger(self, source_channel: int, slope: str) -> None:
         slope_map = {"rising": 0, "falling": 1}
         assert source_channel in self.valid_channel_ids()
         assert slope in slope_map, f"Only following slope types are allowed: {list(slope_map.keys())}"
 
         self.__send_cmd(0xc1, parameter=[source_channel, slope_map[slope]])
 
-    def __send_set_trigger_level(self, level) -> None:
+    def __send_set_trigger_level(self, level: int) -> None:
         assert 0 <= level <= 2**12
         self.__send_cmd(0xab, parameter=int.to_bytes(level, length=2, byteorder="big", signed=False))
 
     def __send_ping(self, sec_till_start: float=0) -> None:
         self.__send_cmd(0xf3, sec_till_start=sec_till_start)
 
-    def init(self):
+    def init(self) -> None:
         self._init1()
         self._init2()
         self._init3()
 
-    def _init1(self):
+    def _init1(self) -> None:
         """Initialize the device like the windows software does it"""
         self.__send_cmd(0xb0)
         sleep(0.7)  # not sure if needed
@@ -315,7 +315,7 @@ class Hantek1008Raw:
 
         self.__send_cmd(0xac, parameter=bytes.fromhex("01f40009c50009c5"))
 
-    def _init2(self):
+    def _init2(self) -> None:
         """get zero offsets for all channels and vscales"""
         self._zero_offsets = {}
         for vscale_id in range(1, 4):
@@ -343,7 +343,7 @@ class Hantek1008Raw:
                                        for ch in Hantek1008Raw.valid_channel_ids()]
             self._zero_offsets[vscale] = zero_offset_per_channel
 
-    def _init3(self):
+    def _init3(self) -> None:
         self.__send_cmd(0xf6, sec_till_response_request=0.2132)
 
         response = self.__send_cmd(0xe5, echo_expected=False, response_length=2)
@@ -506,12 +506,16 @@ class Hantek1008Raw:
             # TODO: auto start pause tread?
             pass
 
-    def get_zero_offsets(self) -> Dict[float, List[float]]:
+    def get_zero_offsets(self) -> Optional[Dict[float, List[float]]]:
         return copy.deepcopy(self._zero_offsets)
 
-    def get_zero_offset(self, channel_id: int, vscale: Optional[float] = None) -> float:
+    def get_zero_offset(self, channel_id: int, vscale: Optional[float] = None) -> Optional[float]:
         assert channel_id in Hantek1008Raw.valid_channel_ids()
         assert vscale is None or vscale in Hantek1008Raw.valid_vscale_factors()
+
+        # if this methode is called before init/connect zero_offset will be null
+        if self._zero_offsets is None:
+            return None
 
         if vscale is None:
             vscale = self.get_vscale(channel_id)
@@ -528,7 +532,7 @@ class Hantek1008Raw:
 
         self.__send_cmd(0xbb, parameter=[0x08, 0x01 if turn_on else 0x00])
 
-    def set_generator_speed(self, speed_in_rpm):
+    def set_generator_speed(self, speed_in_rpm: int) -> None:
         # TODO speed_in_rpm must be round to valid values, dont know how
         def compute_pulse_length(speed_in_rpm: int, bits_per_wave: int = 8) -> int:
             assert 1 <= speed_in_rpm <= 750_000
@@ -584,6 +588,7 @@ class Hantek1008Raw:
     def cancel_pause(self) -> None:
         if not self.is_paused():
             raise RuntimeError("Can't cancel pause because device is not paused")
+        assert self.__pause_thread is not None
         self.__cancel_pause_thread = True
         self.__pause_thread.join()
         self.__pause_thread = None
@@ -633,7 +638,8 @@ class Hantek1008Raw:
         return [data[i] + data[i + 1] * 256 for i in range(0, len(data), 2)]
 
     @staticmethod
-    def __to_per_channel_lists(shorts: List[int], active_channels: List[int], expect_ninth_channel: bool = False) -> Dict[int, List[int]]:
+    def __to_per_channel_lists(shorts: List[int], active_channels: List[int], expect_ninth_channel: bool = False
+                               ) -> Dict[int, List[int]]:
         """Create a dictionary (of the size of 'channel_count') of lists,
         where the dictionary at key x contains the data for channel x+1 of the hantek device.
         In rolling mode there is an additional 9th channel, with values around 1742 this
@@ -673,7 +679,7 @@ class Hantek1008(Hantek1008Raw):
                  correction_data: Optional[CorrectionDataType] = None,
                  zero_offset_shift_compensation_channel: Optional[int] = None,
                  zero_offset_shift_compensation_function: Optional[ZeroOffsetShiftCompensationFunctionType] = None,
-                 zero_offset_shift_compensation_function_time_offset_sec: Optional[int] = 0) -> None:
+                 zero_offset_shift_compensation_function_time_offset_sec: int = 0) -> None:
 
         if active_channels is None:
             active_channels = Hantek1008Raw.valid_channel_ids()
@@ -697,7 +703,7 @@ class Hantek1008(Hantek1008Raw):
         self.__zero_offset_shift_compensation_channel: Optional[int] = zero_offset_shift_compensation_channel
         self.__zero_offset_shift_compensation_value: float = 0.0
 
-        self.__zero_offset_shift_compensation_function: ZeroOffsetShiftCompensationFunctionType \
+        self.__zero_offset_shift_compensation_function: Optional[ZeroOffsetShiftCompensationFunctionType] \
             = zero_offset_shift_compensation_function
         self.__start_monotonic_time = time.monotonic() - zero_offset_shift_compensation_function_time_offset_sec
 
@@ -712,6 +718,8 @@ class Hantek1008(Hantek1008Raw):
 
     def __update_zero_offset_compensation_value(self, zero_readings: List[int]) -> None:
         # TODO problem zero offset different on different vscales?
+        assert self.__zero_offset_shift_compensation_channel is not None
+        assert self._zero_offsets is not None
         zoscc_vscale = Hantek1008Raw.get_vscale(self, self.__zero_offset_shift_compensation_channel)
         assert zoscc_vscale == 1.0  # is this really necessary?
         zoscc_zero_offset = self._zero_offsets[zoscc_vscale][self.__zero_offset_shift_compensation_channel]
@@ -731,6 +739,7 @@ class Hantek1008(Hantek1008Raw):
             vscale = Hantek1008Raw.get_vscale(self, channel_id)
 
         zero_offset = Hantek1008Raw.get_zero_offset(self, channel_id, vscale)
+        assert zero_offset is not None
         if self.__zero_offset_shift_compensation_channel is not None:
             zero_offset += self.__zero_offset_shift_compensation_value
         if self.__zero_offset_shift_compensation_function is not None:
@@ -827,8 +836,8 @@ class Hantek1008(Hantek1008Raw):
         alpha = (delta_to_zero - units_less) / (units_greater - units_less)
         return (1.0 - alpha) * cfactor_less + alpha * cfactor_greater
 
-    def __process_raw_per_channel_data(self, raw_per_channel_data: Dict[int, List[int]], mode: str) \
-            -> Dict[int, Union[List[int], List[float]]]:
+    def __process_raw_per_channel_data(self, raw_per_channel_data: Dict[int, List[int]], mode: str
+                                       ) -> Dict[int, Union[List[int], List[float]]]:
         assert mode in ["raw", "volt", "volt+raw"]
         result: Dict[int, Union[List[float], List[int]]] = {}
         if "volt" in mode:
@@ -841,11 +850,9 @@ class Hantek1008(Hantek1008Raw):
         return result
 
     @overrides
-    def request_samples_burst_mode(self, mode: str = "volt") \
-            -> Dict[int, Union[List[int], List[float]]]:
+    def request_samples_burst_mode(self, mode: str = "volt"
+                                   ) -> Dict[int, Union[List[int], List[float]]]:
         assert self.__zero_offset_shift_compensation_channel is None, \
             "zero offset shift compensation is not implemented for burst mode"
         raw_per_channel_data = Hantek1008Raw.request_samples_burst_mode(self)
         return self.__process_raw_per_channel_data(raw_per_channel_data, mode)
-
-

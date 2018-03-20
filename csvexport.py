@@ -202,7 +202,7 @@ def sample(device: Hantek1008, raw_or_volt: str, selected_channels: List[int], s
     log.info(f"Processing data of channel{'' if len(selected_channels) == 1 else 's'}:"
              f" {' '.join([str(i+1) for i in selected_channels])}")
 
-    computed_actual_sampling_rate = Hantek1008.actual_sampling_rate_factor(len(selected_channels))
+    computed_actual_sampling_rate = Hantek1008.actual_sampling_rate_factor(len(selected_channels)) * sampling_rate
     log.warning(f"When not using all 8 channels, the actual sampling rate ({computed_actual_sampling_rate:.2f}) is "
                 f"higher than the given sampling_rate ({sampling_rate})! "
                 f"Best is to use the --measuresamplingrate flag.")

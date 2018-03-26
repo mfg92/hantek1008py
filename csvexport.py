@@ -54,6 +54,7 @@ def main(csv_file_path: str,
          raw_or_volt: RawVoltMode=RawVoltMode.VOLT,
          samlping_mode: SamplingMode=SamplingMode.ROLL,
          sampling_rate: float=440,
+         ns_per_div: int=500_000,
          timestamp_style: TimestampStyle=TimestampStyle.OWN_ROW,
          do_sampling_rate_measure: bool=True) -> None:
 
@@ -134,7 +135,7 @@ def main(csv_file_path: str,
         if len(channels_without_cd) > 0:
             log.warning(f"There is no calibration data for channel(s): {channels_without_cd}")
 
-    device = connect(vertical_scale_factor, selected_channels, correction_data, zero_offset_shift_compensation_channel,
+    device = connect(ns_per_div, vertical_scale_factor, selected_channels, correction_data, zero_offset_shift_compensation_channel,
                      zero_offset_shift_compensation_function, zero_offset_shift_compensation_function_time_offset_sec)
 
     if calibrate_output_file_path:
@@ -173,7 +174,7 @@ def main(csv_file_path: str,
                 except:
                     pass
             sleep(1.0)
-            device = connect(vertical_scale_factor, selected_channels, correction_data,
+            device = connect(ns_per_div, vertical_scale_factor, selected_channels, correction_data,
                              zero_offset_shift_compensation_channel,
                              zero_offset_shift_compensation_function,
                              zero_offset_shift_compensation_function_time_offset_sec)
@@ -184,13 +185,15 @@ def main(csv_file_path: str,
     device.close()
 
 
-def connect(vertical_scale_factor: Union[float, List[float]],
+def connect(ns_per_div: int,
+            vertical_scale_factor: Union[float, List[float]],
             selected_channels: List[int],
             correction_data: Optional[CorrectionDataType] = None,
             zero_offset_shift_compensation_channel: Optional[int] = None,
             zero_offset_shift_compensation_function: Optional[ZeroOffsetShiftCompensationFunctionType] = None,
-            zero_offset_shift_compensation_function_time_offset_sec: Optional[int] = 0):
-    device = Hantek1008(vertical_scale_factor=vertical_scale_factor,
+            zero_offset_shift_compensation_function_time_offset_sec: int = 0) -> Hantek1008:
+    device = Hantek1008(ns_per_div=ns_per_div,
+                        vertical_scale_factor=vertical_scale_factor,
                         active_channels=selected_channels,
                         correction_data=correction_data,
                         zero_offset_shift_compensation_channel=zero_offset_shift_compensation_channel,
@@ -506,13 +509,17 @@ Collect data from device 'Hantek 1008'. Usage examples:
                         type=SamplingMode, default=SamplingMode.ROLL, choices=list(SamplingMode),
                         help="TODO")
     parser.add_argument('-f', '--samplingrate', dest='sampling_rate',
-                        type=float, default=440, choices=Hantek1008.valid_roll_sampling_rates(),
-                        help='Sets the sampling rate (in Hz) the device should use (default:440). If not all channels '
-                             'are used the actual sampling rate is higher. The factors are: '
+                        type=float, default=440, choices=Hantek1008.valid_roll_mode_sampling_rates(),
+                        help='Sets the sampling rate (in Hz) the device should use in roll mode (default:440). '
+                             'If not all channels are used the actual sampling rate is higher. The factors are: '
                              f'{[Hantek1008.actual_sampling_rate_factor(ch) for ch in  range(1, 9)]}. '
                              'E.g. if only two channels are used the actual sampling rate is 3.03 higher '
                              'than the given value. A free channel that is used for the zos-compensation will reduce '
                              'the actual sampling the same way as if the channel is normally used.')
+    parser.add_argument('-n', '--nsperdiv', dest='ns_per_div',
+                        type=float, default=500_000, choices=Hantek1008.valid_burst_mode_ns_per_divs(),
+                        help='Sets the horizontal resolution (in nanoseconds per div) the device should use in '
+                             'burst mode (default:500_000). A single div contains around 25 samples.')
     parser.add_argument('-m', '--measuresamplingrate', dest='do_sampling_rate_measure', action="store_const",
                         default=False, const=True,
                         help='Measures the exact sampling rate the device achieves by using the computer internal '
@@ -565,6 +572,9 @@ Collect data from device 'Hantek 1008'. Usage examples:
             arg_assert(args.zos_compensation[1].isdigit(), "The second argument must be an int")
             args.zos_compensation[1] = int(args.zos_compensation[1])
 
+    arg_assert(not (args.do_sampling_rate_measure and args.sampling_mode == SamplingMode.BURST),
+               "Measuring the sample rate only works in roll mode")
+
     log.basicConfig(level=args.log_level, format='%(levelname)-7s: %(message)s')
 
     main(selected_channels=args.channels,
@@ -588,5 +598,6 @@ Collect data from device 'Hantek 1008'. Usage examples:
          else 0,
          samlping_mode=args.sampling_mode,
          sampling_rate=args.sampling_rate,
+         ns_per_div=args.ns_per_div,
          timestamp_style=args.timestamp_style,
          do_sampling_rate_measure=args.do_sampling_rate_measure)

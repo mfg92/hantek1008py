@@ -47,6 +47,10 @@ class Hantek1008Raw:
          22: 0x1c, 11: 0x1d, 5: 0x1e, 2: 0x1f,
          1: 0x20, 0.5: 0x21, 0.25: 0x22, 0.125: 0x23,
          1.0/16: 0x24}
+    # ids for all valid nanoseconds per div. These ns_per_divs have following pattern:  (1|2|3){0}
+    # eg. 10, 2000 or 5. Maximum is 200_000_000
+    # a div contains around 25 samples
+    __burst_mode_ns_per_div_to_id_dic = {({0: 1, 1: 2, 2: 5}[id % 3] * 10 ** (id // 3)): id for id in range(26)}
 
     def __init__(self, ns_per_div: int = 500_000,
                  vertical_scale_factor: Union[float, List[float]] = 1.0,
@@ -196,12 +200,14 @@ class Hantek1008Raw:
         """send the a3 command to set the sample rate.
         only allows values that follow this pattern: (1|2|3){0}. eg. 10, 2000 or 5.
         Maximum is 200_000_000"""
-        assert isinstance(ns_per_div, int)
-        assert ns_per_div > 0
-        assert ns_per_div <= 200 * 1000 * 1000  # when the value is higher than 200ms/div, the scan mode must be used
-        assert int(str(ns_per_div)[1:]) == 0, "only first digit is allowed to be != 0"
-        assert int(str(ns_per_div)[0]) in [1, 2, 5], "first digit must be 1, 2 or 5"
-        time_per_div_id = {1: 0, 2: 1, 5: 2}[int(str(ns_per_div)[0])] + int(math.log10(ns_per_div)) * 3
+        # assert isinstance(ns_per_div, int)
+        # assert 0 < ns_per_div <= 200 * 1000 * 1000  # when the value is higher than 200ms/div, the scan mode must be used
+        # assert int(str(ns_per_div)[1:]) == 0, "only first digit is allowed to be != 0"
+        # assert int(str(ns_per_div)[0]) in [1, 2, 5], "first digit must be 1, 2 or 5"
+        # time_per_div_id = {1: 0, 2: 1, 5: 2}[int(str(ns_per_div)[0])] + int(math.log10(ns_per_div)) * 3
+        assert ns_per_div in self.__burst_mode_ns_per_div_to_id_dic, "The given ns_per_div is invalid"
+
+        time_per_div_id = self.__burst_mode_ns_per_div_to_id_dic[ns_per_div]
         self.__send_cmd(0xa3, parameter=[time_per_div_id])
 
     @staticmethod
@@ -430,8 +436,12 @@ class Hantek1008Raw:
         return list(range(0, Hantek1008Raw.channel_count()))
 
     @staticmethod
-    def valid_roll_sampling_rates() -> List[float]:
+    def valid_roll_mode_sampling_rates() -> List[float]:
         return copy.deepcopy(list(Hantek1008Raw.__roll_mode_sampling_rate_to_id_dic.keys()))
+
+    @staticmethod
+    def valid_burst_mode_ns_per_divs() -> List[float]:
+        return copy.deepcopy(list(Hantek1008Raw.__burst_mode_ns_per_div_to_id_dic.keys()))
 
     @staticmethod
     def valid_vscale_factors() -> List[float]:
@@ -457,8 +467,8 @@ class Hantek1008Raw:
     def request_samples_roll_mode(self, sampling_rate: int = 440) \
             -> Generator[Dict[int, List[int]], None, None]:
 
-        assert sampling_rate in Hantek1008Raw.valid_roll_sampling_rates(), \
-            f"sample_rate must be in {Hantek1008Raw.valid_roll_sampling_rates()}"
+        assert sampling_rate in Hantek1008Raw.__roll_mode_sampling_rate_to_id_dic, \
+            f"sample_rate must be in {Hantek1008Raw.__roll_mode_sampling_rate_to_id_dic.keys()}"
 
         try:
             # sets the sample rate: 18 -> 440 samples/sec/channel

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from hantek1008 import Hantek1008, CorrectionDataType, ZeroOffsetShiftCompensationFunctionType
-from typing import Union, Optional, List, Dict, Any, IO
+from typing import Union, Optional, List, Dict, Any, IO, TextIO
+import typing
 import logging as log
 import argparse
 import time
@@ -20,7 +21,8 @@ assert sys.version_info >= (3, 6)
 
 
 class ArgparseEnum(Enum):
-    def __str__(self):
+    def __str__(self) -> str:
+        assert isinstance(self.value, str)
         return self.value
 
 
@@ -136,6 +138,7 @@ def main(csv_file_path: str,
                      zero_offset_shift_compensation_function, zero_offset_shift_compensation_function_time_offset_sec)
 
     if calibrate_output_file_path:
+        assert calibrate_channels_at_once is not None
         calibration_routine(device, calibrate_output_file_path, calibrate_channels_at_once)
         device.close()
         sys.exit()
@@ -226,8 +229,8 @@ def sample(device: Hantek1008,
            vertical_scale_factor: List[float],
            csv_file_path: str,
            timestamp_style: TimestampStyle,
-           measured_sampling_rate: float = None
-           ):
+           measured_sampling_rate: Optional[float] = None
+           ) -> None:
     log.info(f"Processing data of channel{'' if len(selected_channels) == 1 else 's'}:"
              f" {' '.join([str(i+1) for i in selected_channels])}")
 
@@ -277,18 +280,20 @@ def sample(device: Hantek1008,
 
         csv_writer.write_comment(f"vscale: {', '.join(str(f) for f in vertical_scale_factor)}")
         csv_writer.write_comment("# zero offset data:")
-        for vscale, zero_offset in sorted(device.get_zero_offsets().items()):
+        zero_offsets = device.get_zero_offsets()
+        assert zero_offsets is not None
+        for vscale, zero_offset in sorted(zero_offsets.items()):
             csv_writer.write_comment(f"zero_offset [{vscale:<4}]: {' '.join([str(round(v, 1)) for v in zero_offset])}")
 
         csv_writer.write_comment(f"zosc-method: {device.get_used_zero_offsets_shift_compensation_method()}")
 
         csv_writer.write_comment(f"DATA")
 
-        # TODO: make these configurable
+        # TODO: make this configurable
         milli_volt_int_representation = False
 
         def write_per_channel_data(per_channel_data: Dict[int, Union[List[int], List[float]]],
-                                   time_of_first_value: float,
+                                   time_of_first_value: Optional[float],
                                    time_of_last_value: float) \
                 -> None:
             # sort all channels the same way as in selected_channels
@@ -299,6 +304,7 @@ def sample(device: Hantek1008,
                                          for single_channel in per_channel_data_list]
 
             if timestamp_style == "first_column":
+                assert time_of_first_value is not None
                 values_per_channel_count = len(per_channel_data_list[0])
                 deltatime_per_value = (time_of_last_value - time_of_first_value) / values_per_channel_count
                 timestamps_interpolated = [time_of_first_value + i * deltatime_per_value
@@ -349,7 +355,7 @@ def measure_sampling_rate(device: Hantek1008, used_sampling_rate: float, measurm
     return counter/duration
 
 
-def calibration_routine(device: Hantek1008, calibrate_file_path: str, channels_at_once: int):
+def calibration_routine(device: Hantek1008, calibrate_file_path: str, channels_at_once: int) -> None:
     assert channels_at_once in [1, 2, 4, 8]
 
     print("This interactive routine will generate a calibration that can later be used "
@@ -419,7 +425,7 @@ def calibration_routine(device: Hantek1008, calibrate_file_path: str, channels_a
         calibration_file.write(json.dumps(calibration_data))
 
 
-def check_and_open_file(file_path: str):
+def check_and_open_file(file_path: str) -> TextIO:
     if not os.path.exists(file_path):
         log.error(f"There is no file '{file_path}'.")
         sys.exit(1)
@@ -439,7 +445,7 @@ Collect data from device 'Hantek 1008'. Usage examples:
         {sys.argv[0]} --calibrate my_cal.cd.json 1
 """
 
-    def channel_type(value):
+    def channel_type(value: str) -> int:
         ivalue = int(value)
         if 1 <= ivalue <= 8:
             return ivalue
@@ -524,7 +530,7 @@ Collect data from device 'Hantek 1008'. Usage examples:
 
     args.log_level = str_to_log_level[args.log_level]
 
-    def arg_assert(ok, fail_message):
+    def arg_assert(ok: bool, fail_message: str) -> None:
         if not ok:
             parser.error(fail_message)
 

@@ -1,4 +1,4 @@
-from typing import List, Any, Sequence, Callable, TextIO
+from typing import List, Any, Sequence, Callable, IO
 import threading
 import queue
 import csv
@@ -15,7 +15,7 @@ except ImportError:
 
 class CsvWriter:
 
-    def __init__(self, file: TextIO, delimiter: str) -> None:
+    def __init__(self, file: IO[str], delimiter: str) -> None:
         self.__csv_file = file
         self.__csv_writer = csv.writer(file, delimiter=delimiter)
 
@@ -37,7 +37,7 @@ class ThreadedCsvWriter(CsvWriter):
     Writes content to a csv file using an extra thread
     """
 
-    def __init__(self, file: TextIO, delimiter: str) -> None:
+    def __init__(self, file: IO[str], delimiter: str) -> None:
         super().__init__(file, delimiter)
         self.__closed: bool = False
         self.__work_queue: queue.Queue = queue.Queue()  # a thread-safe FIFO queue

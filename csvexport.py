@@ -519,7 +519,8 @@ Collect data from device 'Hantek 1008'. Usage examples:
     parser.add_argument('-n', '--nsperdiv', dest='ns_per_div',
                         type=float, default=500_000, choices=Hantek1008.valid_burst_mode_ns_per_divs(),
                         help='Sets the horizontal resolution (in nanoseconds per div) the device should use in '
-                             'burst mode (default:500_000). A single div contains around 25 samples.')
+                             'burst mode (default:500_000). A single div contains around 25 samples.'
+                             'If not all channels are used, the actual resolution increases by an unknown factor.')
     parser.add_argument('-m', '--measuresamplingrate', dest='do_sampling_rate_measure', action="store_const",
                         default=False, const=True,
                         help='Measures the exact sampling rate the device achieves by using the computer internal '

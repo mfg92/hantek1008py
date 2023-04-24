@@ -757,7 +757,7 @@ class Hantek1008(Hantek1008Raw):
             zero_offset += self.__zero_offset_shift_compensation_function(channel_id, vscale, delta_sec)
         return zero_offset
 
-    @overrides
+    @overrides(check_signature=False)
     def request_samples_roll_mode_single_row(self, **argv)\
             -> Generator[Dict[int, float], None, None]:
         for per_channel_data in self.request_samples_roll_mode(**argv):

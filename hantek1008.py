@@ -764,7 +764,7 @@ class Hantek1008(Hantek1008Raw):
             for row in list(zip(*per_channel_data.values())):
                 yield dict(zip(per_channel_data.keys(), row))
 
-    @overrides
+    @overrides(check_signature=False)
     def request_samples_roll_mode(self, sampling_rate: int = 440, mode: str = "volt") \
             -> Generator[Dict[int, Union[List[float], List[int]]], None, None]:
 
@@ -859,7 +859,7 @@ class Hantek1008(Hantek1008Raw):
         self.__remove_zosc_channel_data(result)
         return result
 
-    @overrides
+    @overrides(check_signature=False)
     def request_samples_burst_mode(self, mode: str = "volt"
                                    ) -> Dict[int, Union[List[int], List[float]]]:
         assert self.__zero_offset_shift_compensation_channel is None, \

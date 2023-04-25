@@ -52,7 +52,7 @@ def main(csv_file_path: str,
          zero_offset_shift_compensation_function_file_path: Optional[str]=None,
          zero_offset_shift_compensation_function_time_offset_sec: int=0,
          raw_or_volt: RawVoltMode=RawVoltMode.VOLT,
-         samlping_mode: SamplingMode=SamplingMode.ROLL,
+         sampling_mode: SamplingMode=SamplingMode.ROLL,
          sampling_rate: float=440,
          ns_per_div: int=500_000,
          timestamp_style: TimestampStyle=TimestampStyle.OWN_ROW,
@@ -158,7 +158,7 @@ def main(csv_file_path: str,
     # data collection is in loop because in case of an error it restarts the collection
     for i in range(1, 100):
         try:
-            sample(device, raw_or_volt, selected_channels, samlping_mode, sampling_rate, vertical_scale_factor,
+            sample(device, raw_or_volt, selected_channels, sampling_mode, sampling_rate, vertical_scale_factor,
                    csv_file_path, timestamp_style, measured_sampling_rate)
             # no error? -> finished by user interaction
             break
@@ -597,7 +597,7 @@ Collect data from device 'Hantek 1008'. Usage examples:
          args.zos_compensation[1]
          if args.zos_compensation is not None and len(args.zos_compensation) == 2
          else 0,
-         samlping_mode=args.sampling_mode,
+         sampling_mode=args.sampling_mode,
          sampling_rate=args.sampling_rate,
          ns_per_div=args.ns_per_div,
          timestamp_style=args.timestamp_style,

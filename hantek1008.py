@@ -16,8 +16,11 @@ import sys
 try:
     from overrides import overrides
 except ImportError:
-    def overrides(method: Callable) -> Callable:
-        return method
+    # create dummy decorator that accepts any arguments
+    def overrides(**kwargs):
+        def overrides_helper(method: Callable) -> Callable:
+            return method
+        return overrides_helper
 
 assert sys.version_info >= (3, 6)
 

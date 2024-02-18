@@ -1,6 +1,15 @@
 # Hantek1008Driver
 
-This project provides the ability to use Hantek 1008 USB-oscilloscopes without the proprietary software on Linux and Windows (not tested). You can include the Hantek1008 from 'hantek1008.py' class in your project, to get access to the features of the device, or use the csvexport.py Python application to gain data and save it to a file.
+This project provides tooling for using Hantek 1008 USB-oscilloscopes
+without proprietary software on Linux and Windows (not tested).
+You can include the Hantek1008 class from 'hantek1008.py' in your project
+to get access to the features of the device.
+Alternatively use the csvexport.py Python application to gain data and save it to a file.
+
+This project is based on careful reverse engineering of the device's USB protocol.
+The reverse engineering was only done to the extent necessary to obtain data for my master's thesis and
+does not cover all the features and configuration options of the device.
+Therefore, no guarantees can be made as to the reliability or accuracy of the data collected.
 
 ### Usageexample of csvexport.py:
 `python3 csvexport.py mydata.csv -s 1 2`
@@ -9,7 +18,6 @@ This will write the measured data of channel 1 and 2 to 'mydata.csv' until you p
 ### Help Options:
 `python3 csvexport.py --help`
 This will show you all the available options/parameters and explains them in-depth.
-
 
 ### Notes:
 * Requires Python >= 3.6

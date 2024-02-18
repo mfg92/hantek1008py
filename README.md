@@ -27,3 +27,9 @@ This will show you all the available options/parameters and explains them in-dep
      ACTION=="add", SUBSYSTEM=="usb", ATTRS{idVendor}=="0783", ATTR{idProduct}=="5725", MODE="0666"
   2. Then `sudo udevadm control -R`
   3. Replug the device
+* The code contains many assert statements.
+  They exist because I noticed at the time that the respective responses on my device were always the same.
+  I was not able (nor was there any need) to find out what these responses meant,
+  but I wanted to be notified if the response changed for any reason, hence the assert statements.
+  With a different copy of the device, you might get different answers. So some asserts may fail.
+  Therefore, it might be necessary to remove or adapt these assert statements.

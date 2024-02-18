@@ -33,3 +33,11 @@ This will show you all the available options/parameters and explains them in-dep
   but I wanted to be notified if the response changed for any reason, hence the assert statements.
   With a different copy of the device, you might get different answers. So some asserts may fail.
   Therefore, it might be necessary to remove or adapt these assert statements.
+
+### Contribution
+
+This project is open for contributions.
+Unfortunately, I have no longer access to a Hantek 1008 device,
+so I cannot test contributions.
+Also giving support in case of a problem is difficult under these
+circumstances, but I will try my best.
